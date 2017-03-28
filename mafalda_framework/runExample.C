@@ -34,12 +34,13 @@ using namespace std;
 
 R__LOAD_LIBRARY(libMediPixAnalysisCore) // ROOT6 (cling)
 
-void runExample(TString fn) {
+void runExample(TString fn = "") {
 
 	//gSystem->Load("libMediPixAnalysisCore"); // ROOT5 (CINT)
 
 	// Get an instance of the analysis manager, including input data
 	// hint: it can also be a text file containing a list of input files
+	if ( fn == "" ) fn = "./testdata/MPXNtuple_12C_TimePix.root";
 	AnalysisManager mpxAnalysis( fn.Data() );
 
 	// A very simple example algorithm

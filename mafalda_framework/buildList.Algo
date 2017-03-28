@@ -1,0 +1,15 @@
+# ALGORITHMS: You can include your new Algoritms in this list so they
+# get compiled with the framework and included in the library.  Write
+# the path (absolute or relative) to the directory where your code is
+# found.
+
+MAFTools
+AnalysisExample
+MetaData
+BlobsFinder
+PRBasicSpecies
+AfterClusteringExample
+PPSResidual
+CalibrationLoader
+SimpleClustering
+TOTCalibrationPreparation

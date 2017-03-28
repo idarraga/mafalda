@@ -43,8 +43,5 @@
 #pragma link C++ class SimpleClustering;
 #pragma link C++ class SimpleClusterContainer;
 #pragma link C++ class TOTCalibrationPreparation;
-#pragma link C++ class ModifyClustersTest;
-#pragma link C++ class CastIronImageAnalysis;
-#pragma link C++ class CNRCalculator;
 
 #endif
