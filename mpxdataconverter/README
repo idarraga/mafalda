@@ -1,0 +1,5 @@
+mpxdataconverter:
+	Converts from Pixelman files to MAFalda
+
+raw_to_cluster:
+	Converts from USBPix raw data to MAFalda

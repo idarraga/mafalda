@@ -1,0 +1,9 @@
+# MAFalda CORE: !!! WARNING !!!  This tells the Makefile where is the
+# Core of the Framework.  In principle you don't need to touch this.
+
+AnalysisCore
+WriteToEntuple
+MPXAlgo
+MPXViewer
+AlgoTimer
+MPXStoreGate

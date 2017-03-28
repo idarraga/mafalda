@@ -1,0 +1,210 @@
+#!/bin/bash
+
+# Author: John Idarraga <idarraga@cern.ch>
+# Medipix Group, Universite de Montreal
+
+# This script is called from the Makefile
+
+targetCase=$1
+suf=$2
+SrcSuf=$3
+declare -a algoList
+declare -a simpleList
+declare -a incList
+
+function GetList(){
+# suffix
+fileName=$1
+skip=$2
+# counter
+algoCntr=0
+# array of filenames
+    while read line
+    do 
+	if [[ "${line:0:1}" != '#' && "${line:0:1}" != "" ]] ; then
+	    algoCntr=$(($algoCntr+1));
+	    try1=`ls $line/*.$SrcSuf`
+	    SrcSufSize=${#SrcSuf}
+	    for a in $try1;
+	      do
+	      if [ -e "$a" ] ; then
+# chop the .$SrcSuf and append $suf
+		  toAdd="${a:0:${#a}-$SrcSufSize}$suf"
+		  if [[ "$a" != "$line/$skip.$suf" && "$targetCase" == "DICT" ]] ; then
+		      algoList="$algoList $toAdd"
+		  elif [ "$targetCase" != "DICT" ] ; then
+		      algoList="$algoList $toAdd"
+		  fi
+	      fi
+	    done
+	fi
+    done < "$fileName"
+}
+
+function GetIncList(){
+# suffix
+    fileName=$1
+# counter
+    algoCntr=0
+# array of filenames
+    while read line
+      do 
+      if [[ "${line:0:1}" != '#' && "${line:0:1}" != "" ]] ; then
+	  idSlash=`echo $line | tr "/" " "`
+	  for each in $idSlash
+	    do
+	    incList="$incList -I./$each"
+	    break
+	  done
+      fi
+    done < "$fileName"
+}
+
+function GetSimpleList(){
+# suffix
+fileName=$1
+# array of filenames
+    while read line
+    do 
+	if [[ "${line:0:1}" != '#' && "${line:0:1}" != "" ]] ; then
+	    simpleList="$simpleList $line"
+	fi
+    done < "$fileName"
+}
+
+function AppendToLinkDef(){
+# suffix
+    fileName=$1
+    linkDefFile=$2
+# counter
+    algoCntr=0
+# array of filenames
+    echo "// Classes automatically added by Makefile" >> $linkDefFile
+#diff buildList.LinkDef_default buildList.LinkDef
+    
+    while read line
+    do 
+	if [[ "${line:0:1}" != '#' && "${line:0:1}" != "" ]] ; then
+	    algoCntr=$(($algoCntr+1));
+	    #find if it is a function
+	    findFunc=`echo $line | awk '{ print $1 }'`
+	    if [ $findFunc == "function" ]; then
+		# fetch the name of the function
+		line=`echo $line | awk '{ print $2 }'`
+		echo "#pragma link C++ function $line;" >> $linkDefFile
+	    else
+		# FrameStruct and FrameContainer are not needed anymore in the Dict
+		#  spare the user the trouble of realizing that
+		if [[ "$line" != "FrameStruct" && "$line" != "FrameContainer" ]] ; then 
+		    echo "#pragma link C++ class $line;" >> $linkDefFile
+		fi
+	    fi
+	fi
+    done < "$fileName"
+
+    echo "" >> $linkDefFile
+    echo "#endif" >> $linkDefFile
+
+}
+
+
+
+function CheckMissingBuilds(){
+
+    fileNameCheck=$1
+    
+    GetSimpleList "$fileNameCheck"
+    currentList=$simpleList
+    simpleList=""
+    GetSimpleList "${fileNameCheck}_default"
+    newList=$simpleList
+    for a in $newList
+    do
+	algoFound=0	
+ 	for b in  $currentList
+ 	do
+ 	    if [ "$a" == "$b" ]; then
+ 		algoFound=1
+ 	    fi
+ 	done
+ 	if [ $algoFound == 0 ] ; then
+	    ## append missing line !!!
+ 	    echo $a >> $fileNameCheck
+	fi
+    done
+}
+
+# copy buildList.* files from defaults if they don't exist
+# if they exist check if there are new elements in the defaults
+algoFound=0
+
+if [ ! -e "buildList.Core" ] ; then
+    cp -f buildList.Core_default buildList.Core
+else
+    if [ "$targetCase" == "ANO" ]; then
+	CheckMissingBuilds "buildList.Core"
+    fi
+fi
+
+if [ ! -e "buildList.Algo" ] ; then
+    cp -f buildList.Algo_default buildList.Algo
+else
+    if [ "$targetCase" == "ANO" ]; then
+	CheckMissingBuilds "buildList.Algo"
+    fi
+fi
+
+if [ ! -e "buildList.LinkDef" ] ; then
+    cp -f buildList.LinkDef_default buildList.LinkDef
+else
+    if [ "$targetCase" == "DICT" ]; then
+	CheckMissingBuilds "buildList.LinkDef"
+    fi
+fi
+
+#######################################
+if [ "$targetCase" == "ANO" ]; then
+
+    GetList "buildList.Core" "" #"OBJ"
+    GetList "buildList.Algo" "" #"OBJ"
+    echo "$algoList"
+
+#elif [ "$targetCase" == "ANS" ]; then
+
+#    GetList "buildList.Core" ""
+#    GetList "buildList.Algo" ""
+
+elif [ "$targetCase" == "DICT" ]; then
+
+# In this case I don't need the rule for MediPixAnalysisCoreDict
+#  because it does not exist yet ! ... It is going to be created
+#  by rootcint ;).  I skip it and append after MediPixAnalysisCoreLinkDef.h
+    GetList "buildList.Core" "MediPixAnalysisCoreLinkDef" # last argument -> skip
+    GetList "buildList.Algo" ""
+
+# Now we create the LinkDef file, reading from "buildList.LinkDef"
+
+    cp AnalysisCore/MediPixAnalysisCoreLinkDef.h_header AnalysisCore/MediPixAnalysisCoreLinkDef.h_new
+    AppendToLinkDef "buildList.LinkDef" "AnalysisCore/MediPixAnalysisCoreLinkDef.h_new"
+
+    if [ -e "AnalysisCore/MediPixAnalysisCoreLinkDef.h" ] ; then
+	diffLinkDef=`diff AnalysisCore/MediPixAnalysisCoreLinkDef.h AnalysisCore/MediPixAnalysisCoreLinkDef.h_new`
+	# Check if the LinkDef changed
+	if [ -n "$diffLinkDef" ] ; then
+	    mv -f AnalysisCore/MediPixAnalysisCoreLinkDef.h_new AnalysisCore/MediPixAnalysisCoreLinkDef.h
+	else
+	    # If it didn't change I don't need to produce again the dictionary
+	    rm -f AnalysisCore/MediPixAnalysisCoreLinkDef.h_new
+	fi
+    else
+	mv -f AnalysisCore/MediPixAnalysisCoreLinkDef.h_new AnalysisCore/MediPixAnalysisCoreLinkDef.h
+    fi
+
+    algoList="$algoList AnalysisCore/MediPixAnalysisCoreLinkDef.h"
+    echo "$algoList"
+
+elif [ "$targetCase" == "CINCDEP" ]; then
+    # in this case identify if new -I statements are needed
+    GetIncList "buildList.Algo" ""
+    echo "$incList"
+fi

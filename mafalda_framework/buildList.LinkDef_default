@@ -1,0 +1,33 @@
+# LINKDEF: This file should contain the name of the classes you want
+# to be recognized by CINT.
+
+AnalysisExample
+
+MediPixAnalysisCore
+AnalysisManager
+WriteToNtuple
+MediPixAlgo
+MPXViewer
+MPXViewerControl
+Signals
+TextMargin
+CandidateContainer
+OutputMng
+BlobsFinder
+AllBlobsContainer
+PRBasicSpecies
+MAFTArrow
+MAFTEllipse
+MAFTLine
+Highlighter
+MetaData
+ConfigurationValue<Int_t>+
+ConfigurationValue<Double_t>+
+ConfigurationValue<Float_t>+
+ConfigurationValue<Bool_t>+
+AfterClusteringExample
+PPSResidual
+CalibrationLoader
+SimpleClustering
+SimpleClusterContainer
+TOTCalibrationPreparation
