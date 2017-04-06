@@ -2187,7 +2187,44 @@ CalibHandler::CalibHandler (string source) {
 		m_calibPoints[0] = 23.0; //
 		m_calibPointsRegion[0] = __linear_reg;
 
-	}
+	} else if ( ! TString(source).CompareTo( "Am241In", TString::kIgnoreCase )
+			||
+			! TString(source).CompareTo( "Am241_In", TString::kIgnoreCase )
+			||
+			! TString(source).CompareTo( "Am241-In", TString::kIgnoreCase 	)
+	) {
+		// X-ray Am241
+		m_calibPoints[0] = 13.9;	// kev
+		m_calibPointsRegion[0] = __linear_reg;
+
+		// Fluorescence In
+		m_calibPoints[1] = 24.2;	// kev
+		m_calibPointsRegion[1] = __linear_reg;
+
+		// X-ray Am241
+		m_calibPoints[2] = 59.5409;   // kev
+		m_calibPointsRegion[2] = __linear_reg; // this point can be used to define de linear region
+
+	} else if ( ! TString(source).CompareTo( "ZrFluo", TString::kIgnoreCase )
+			||
+			! TString(source).CompareTo( "Zr-Fluo", TString::kIgnoreCase )
+			||
+			! TString(source).CompareTo( "Zr_Fluo", TString::kIgnoreCase )
+	) {
+		// Fluorescence Zr
+		m_calibPoints[0] = 15.78; // kev
+		m_calibPointsRegion[0] = __linear_reg;
+
+    } else if ( ! TString(source).CompareTo( "ZnFluo", TString::kIgnoreCase )
+			||
+			! TString(source).CompareTo( "Zn-Fluo", TString::kIgnoreCase )
+			||
+			! TString(source).CompareTo( "Zn_Fluo", TString::kIgnoreCase )
+	) {
+    	// Fluorescence Zn
+		m_calibPoints[0] = 8.64; // kev
+		m_calibPointsRegion[0] = __linear_reg; // could be __lownenergy_reg in some cases
+    }
 
 	cout << " and contains " << m_calibPoints.size() << " calibration point(s)" << endl;
 
