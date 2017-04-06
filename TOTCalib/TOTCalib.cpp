@@ -214,10 +214,10 @@ void TOTCalib::RandomFitParametersSurrogate (TF1 * f, double a, double b) {
  * to start the fit. Some of the vars will be random.
  */
 
-void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot) {
+void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
 
 	//double * pars = new double (__npars_lowe_fitfunc);
-
+	double loc_bandwidth = s->GetKernelBandWidth();
 	if(m_verbose == __VER_DEBUG_LOOP) { cout << "[RAND] Producing a set of random fit parameters." << endl; }
 
 	if ( TString(f->GetName()).Contains("gf_lowe") ) {
@@ -230,9 +230,9 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot) {
 		double valattot = h->GetBinContent( h->FindBin(tot) );
 		f->SetParameter(0, valattot );
 		// p1 is the mean tot and can be just the tot, or somewhere close towards to the right
-		f->SetParameter(1, m_rand1->Rndm()*m_bandwidth + tot);
+		f->SetParameter(1, m_rand1->Rndm()*loc_bandwidth + tot);
 		// p2 is the sigma of the gaussian part.  Use the bandwidth
-		f->SetParameter(2, m_bandwidth);
+		f->SetParameter(2, loc_bandwidth);
 		// p3 is a. Random --> (-1, 1)
 		f->SetParameter(3, m_rand1->Rndm()*2. - 1.);
 		// p4 is b. Random --> (-1, 1)
@@ -247,9 +247,9 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot) {
 		// p0 is the amplitude and can always be taken from the histogram
 		f->SetParameter(0, h->GetBinContent( h->FindBin(tot) ) );
 		// p1 is the mean tot and can be just the tot, or somewhere close towards to the right
-		f->SetParameter(1, m_rand1->Rndm()*m_bandwidth + tot);
+		f->SetParameter(1, m_rand1->Rndm()*loc_bandwidth + tot);
 		// p2 is the sigma of the gaussian part.  Use the bandwidth
-		f->SetParameter(2, m_bandwidth);
+		f->SetParameter(2, loc_bandwidth);
 
 	}
 
@@ -257,7 +257,7 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot) {
 
 }
 
-int TOTCalib::PeakFit(TOTCalib * /*src*/, int /*pix*/, int tot, TF1 * f, TH1 * h, store * sto) {
+int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, store * sto) {
 
 	// This was a suggestion but didn't quite work correctly.
 	// Use a,b from previous fits in the linear region.
@@ -265,8 +265,9 @@ int TOTCalib::PeakFit(TOTCalib * /*src*/, int /*pix*/, int tot, TF1 * f, TH1 * h
 	// GetLinearFit(a, b, sto->linearpairs);
 	// if(m_verbose == __VER_DEBUG) cout << " -- NOT USED -- a = " << a << ", b = " << b << endl;
 
-	double minf = tot - m_bandwidth;
-	double maxf = tot + m_bandwidth;
+	double loc_bandwidth = src->GetKernelBandWidth(); 
+	double minf = tot - loc_bandwidth;
+	double maxf = tot + loc_bandwidth;
 
 	int centerBin = h->FindBin(tot);
 	double heightAtKernelHint = h->GetBinContent(centerBin);
@@ -303,8 +304,8 @@ int TOTCalib::PeakFit(TOTCalib * /*src*/, int /*pix*/, int tot, TF1 * f, TH1 * h
 
 
 	if( TString(f->GetName()).Contains("gf_lowe") ) {
-		minf = tot - 3*m_bandwidth;
-		maxf = tot + m_bandwidth;
+		minf = tot - 3*loc_bandwidth;
+		maxf = tot + loc_bandwidth;
 	}
 	if(minf < 1) minf = 1; // correct for negative or zero minf value
 
@@ -341,7 +342,7 @@ int TOTCalib::PeakFit(TOTCalib * /*src*/, int /*pix*/, int tot, TF1 * f, TH1 * h
 	//while ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) {
 	while ( continueFitting ) {
 
-		RandomFitParameters( f, h, tot );
+		RandomFitParameters( f, h, tot, src );
 		// keep track of the parameters to choose the better set in case the fit is not good enough
 
 		fittries = 0; // rewind
@@ -692,7 +693,7 @@ void TOTCalib::Blender (TString outputName) {
 		if ( totalNPoints > 0 ) {
 
 			// Create an object with this points and perform a fit.  A TGraph.
-			g = new TGraphErrors(totalNPoints);
+			g = new TGraphErrors(totalNPoints+1); //1 point for every peak expected + detector treshold
 
 			// Counter for points in TGraphErrors
 			int cntr = 0;
@@ -1105,6 +1106,7 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 	vector<double> peaks = s_tot[pix];
 
 	cout << "N peaks found = " << peaks.size() << endl;
+	double loc_bandwidth = s->GetKernelBandWidth(); 
 
 	// This is coming from the kernel funciton
 	// If this pixels presents low energy activity, get rid of a certain number of artificial peaks
@@ -1125,7 +1127,7 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 		vector<double> integ;
 		int npeaks = (int)peaks.size();
 		for ( int i = 0 ; i < (int)peaks.size() ; i++ ) {
-			integ.push_back( th->Integral( th->FindBin( peaks[i] - m_bandwidth ), th->FindBin( peaks[i]+m_bandwidth ) ) );
+			integ.push_back( th->Integral( th->FindBin( peaks[i] - loc_bandwidth ), th->FindBin( peaks[i]+loc_bandwidth ) ) );
 			cout << th->GetName() << " thl=" << peaks[i] << " [" << i << "]=" << integ[i] << " | ";
 		}
 		// If the last peak has low weight (data close to it, integral) then remove the last one
@@ -2057,7 +2059,7 @@ TGraphErrors * TOTCalib::GetCalibGraph(int pix){
 
 	int nPoints = (int)points.size();
 
-	TGraphErrors * g = new TGraphErrors(nPoints);
+	TGraphErrors * g = new TGraphErrors(nPoints+1); //one point for each peak + threshold
 
 	vector<pair<double, double> >::iterator i = points.begin();
 	vector<double>::iterator ie = err.begin();
@@ -2073,6 +2075,8 @@ TGraphErrors * TOTCalib::GetCalibGraph(int pix){
 		ie++;
 		cntr++;
 	}
+	g->SetPoint( cntr, m_thresholdEnergy, 0.0 );
+	g->SetPointError(cntr, m_thresholdEnergy_Err, 0.0 );
 
 	return g;
 }
