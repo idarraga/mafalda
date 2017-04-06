@@ -64,6 +64,9 @@ public:
 	map<int, int> GetCalibPointsRegion(){ return m_calibPointsRegion; };
 	double GetOneEnergyMatch(int i){return m_calibPoints[i]; };
 
+	void CalibIgnorePoint(int i){ m_calibPoints[i]*= -1; };
+	void CalibSetPointRegion(int i, int reg){ m_calibPointsRegion[i] = reg; }
+
 	enum {
 		__linear_reg = 0,
 		__lowenergy_reg,
@@ -208,6 +211,9 @@ public :
 	double SetKernelBandWidth(double b) {return m_bandwidth = b; };
 
 	int GetNBins() { return m_nbins; };
+
+	void IgnorePoint(int i){ m_calhandler->CalibIgnorePoint(i); };
+	void SetPointRegion(int i, int reg){ m_calhandler->CalibSetPointRegion(i,reg); };
 
 private:
 	//////////////////////////////////////////////////////////////////
