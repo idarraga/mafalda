@@ -450,12 +450,15 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 	//  This sigma will be the error in the TGraphError to fit.
 
 	// Sets of points
-	vector< pair<double, double> > points = Extract_E_TOT_Points ( pix, s ) ;
+	vector< pair<double, double> > points = Extract_E_TOT_Points ( pix, s ) ; // energies in this vector are in absolute value (for peak order)
 	vector<pair<double, double> >::iterator i;
 
 	// region type, linear, low energy, undefined
 	map<int, int> region = s->GetCalibHandler()->GetCalibPointsRegion();
 	map<int, int>::iterator regionItr = region.begin();
+
+	map<int, double> Epoint = s->GetCalibHandler()->GetCalibPoints(); // energies in this vector may be < 0 (to skip)
+	map<int, double>::iterator EpointItr = Epoint.begin();
 
 	// The selected fitting function.  Do not delete in this scope !
 	TF1 * gf;
@@ -485,7 +488,21 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 		int status = PeakFit(s, pix, totval, gf, hf, sto);
 		if(m_verbose == __VER_DEBUG) cout << " { status : " << status << " } ";
 
-		// These are the points for the surrogate function fit
+		
+			if( (*EpointItr).second > 0){
+				// These are the points for the surrogate function fit
+				constantfit = gf->GetParameter(0);
+				totmeanfit = gf->GetParameter(1);
+				sigmafit = TMath::Abs ( gf->GetParameter(2) );
+				g->SetPoint(cntr, (*i).first, totmeanfit ); // E, TOT (from the fit in this context)
+				g->SetPointError(cntr, 0., sigmafit );
+				cntr++;		
+			
+				if ( (*regionItr).second == CalibHandler::__linear_reg ) {
+					sto->linearpairs.push_back( make_pair( (*i).first , totmeanfit ) );  // (E, TOT)
+				}
+
+			}
 		constantfit = gf->GetParameter(0);
 		totmeanfit = gf->GetParameter(1);
 		sigmafit = TMath::Abs ( gf->GetParameter(2) );
@@ -588,8 +605,7 @@ void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TOTCalib * s4, TString out
 	m_allSources.push_back( s2 );
 	m_allSources.push_back( s3 );
 	m_allSources.push_back( s4 );
-
-
+	
 	Blender( outputName );
 
 }
@@ -616,7 +632,7 @@ void TOTCalib::Blender (TOTCalib * s2, TString outputName) {
 	// or more points defining the linear region are to be found
 	m_allSources.push_back( this );
 	m_allSources.push_back( s2 );
-
+	
 	Blender( outputName );
 
 }
@@ -675,7 +691,7 @@ void TOTCalib::Blender (TString outputName) {
 		int totalNPoints = 0;
 		vector<TOTCalib *>::iterator i;
 		for(i = m_allSources.begin() ; i != m_allSources.end() ; i++ ) {
-			totalNPoints += GetNumberOf_E_TOT_Points( *i );
+			totalNPoints += GetNumberOf_E_TOT_Points_Positive( *i );
 		}
 
 		// Set of vectors used to store info
@@ -1007,6 +1023,8 @@ void TOTCalib::Finalize(){
 	hprob->Write();
 	//h_5000_Fe->Write();
 
+	//h_5000_Fe->Write();
+
 	m_output_root->Close();
 
 }
@@ -1050,11 +1068,24 @@ TF1 * TOTCalib::GetSurrogateFunction(int pix) {
 }
 
 // The the number of expected points
-int TOTCalib::GetNumberOf_E_TOT_Points (TOTCalib * s) {
+int TOTCalib::GetNumberOf_E_TOT_Points (TOTCalib * s) { // returns every point defined for a source, even ignored points
 
 	map<int, double> calibPoints = s->GetCalibHandler()->GetCalibPoints();
 	return (int)calibPoints.size();
 
+}
+
+int TOTCalib::GetNumberOf_E_TOT_Points_Positive (TOTCalib * s) { // returns only points that are used for surrogate function's fit
+
+	map<int, double> calibPoints = s->GetCalibHandler()->GetCalibPoints();
+	int size=0;
+	map<int, double>::iterator k = calibPoints.begin();
+	for ( ; k != calibPoints.end(); k++ ){
+		if( (*k).second>0){
+			size+=1;
+		}
+	} 
+	return (int)size;
 }
 
 void TOTCalib::PushToLowActivityList(int pix) {
@@ -1164,8 +1195,8 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 		points.push_back(
 				make_pair (
 						// Energy information for that point
-						calibPoints[p],
-						// TOT
+						TMath::Abs(calibPoints[p]), 	// must take absolute value, otherwise order may not be respected;
+						// TOT 							// ignored points will be associated to wrong peaks
 						peaks[p]
 				)
 		);
@@ -1570,24 +1601,24 @@ void TOTCalib::SimpleLinearReggresion(queue<int> q, double * slope){
 
 //}
 
-TOTCalib::TOTCalib(TString fn, TString source, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib * oc) : fChain(0) {
+TOTCalib::TOTCalib(TString fn, TString source, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib * oc, int method) : fChain(0) {
 
 	// Copy certain properties from another calib and continue
 	m_badPixelList = oc->GetBadPixelList();
 
 	// Call the actual function doing the job
-	SetupJob(fn, source, minpix, maxpix, maxtot, nFrames);
+	SetupJob(fn, source, minpix, maxpix, maxtot, nFrames, method);
 
 }
 
-TOTCalib::TOTCalib(TString fn, TString source, int minpix, int maxpix, int maxtot, Long64_t nFrames) : fChain(0) {
+TOTCalib::TOTCalib(TString fn, TString source, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method) : fChain(0) {
 
 	// Call the actual function doing the job
-	SetupJob(fn, source, minpix, maxpix, maxtot, nFrames);
+	SetupJob(fn, source, minpix, maxpix, maxtot, nFrames, method);
 
 }
 
-void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int maxtot, Long64_t nFrames) {
+void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method) {
 
 	m_TOTMultiplierFactor = 1.0;
 
@@ -1606,6 +1637,7 @@ void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int 
 	m_nbins = maxtot;
 	m_histoRebinning = m_nbins; //m_nbins/8;
 	m_nFrames = nFrames;
+	m_method = method;
 
 	// File
 	TFile * f = new TFile(fn);
@@ -1934,6 +1966,11 @@ void TOTCalib::DrawFullPixelCalib(int pix) {
 		// loop over calip points per source
 		for(int p = 0 ; p < nCalibPoints ; p++) {
 
+			if(calibPoints[p]<0){ // skips energies < 0 (ignored points)
+				orderCntr++;
+				continue;
+			}
+
 			// Points used in the fit
 			//cout << "---> " << calibFitPoints[orderCntr].first << " , " << calibFitPoints[orderCntr].second << endl;
 
@@ -2057,9 +2094,7 @@ TGraphErrors * TOTCalib::GetCalibGraph(int pix){
 	vector<pair<double, double> > points = m_calibPoints[pix];
 	vector<double> err = m_calibPointsSigmas[pix];
 
-	int nPoints = (int)points.size();
-
-	TGraphErrors * g = new TGraphErrors(nPoints+1); //one point for each peak + threshold
+	TGraphErrors * g = new TGraphErrors(); // we don't know how many points are not ignored
 
 	vector<pair<double, double> >::iterator i = points.begin();
 	vector<double>::iterator ie = err.begin();
@@ -2067,14 +2102,15 @@ TGraphErrors * TOTCalib::GetCalibGraph(int pix){
 	int cntr = 0;
 	for( ; i != points.end() ; i++) {
 
-		g->SetPoint(cntr, (*i).first, (*i).second );
-		g->SetPointError(cntr, 0.,  *ie );
+		if( (*i).first > 0){
+			g->SetPoint(cntr, (*i).first, (*i).second );
+			g->SetPointError(cntr, 0.,  *ie );
+			ie++;
+			cntr++;
 
-		//cout << "Err = " << *ie << endl;
-
-		ie++;
-		cntr++;
+		}
 	}
+
 	g->SetPoint( cntr, m_thresholdEnergy, 0.0 );
 	g->SetPointError(cntr, m_thresholdEnergy_Err, 0.0 );
 

@@ -111,10 +111,10 @@ public :
 	//TTree * m_tree;
 
 	TOTCalib();
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames);
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *);
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int);
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *, int);
 
-	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames);
+	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int);
 
 	virtual ~TOTCalib();
 	virtual Int_t    Cut(Long64_t entry);
@@ -171,6 +171,7 @@ public :
 	void Blender(TString);
 
 	void ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
+	void ProcessOneSourceLowStats(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
 	void ReorderSources();
 
 	int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *);
@@ -180,6 +181,7 @@ public :
 
 	vector<pair<double, double> > Extract_E_TOT_Points(int, TOTCalib * );
 	int GetNumberOf_E_TOT_Points (TOTCalib * s);
+	int GetNumberOf_E_TOT_Points_Positive (TOTCalib * s);
 
 	double DerivativeFivePointsStencil(TF1 *, double, double);
 	double VectorSum(vector<double>);
@@ -207,6 +209,11 @@ public :
 		__VER_INFO
 	};
 
+	enum { //calibration method
+		__standard = 0,
+		__lowStats,
+	};
+
 	double GetKernelBandWidth(){ return m_bandwidth; };
 	double SetKernelBandWidth(double b) {return m_bandwidth = b; };
 
@@ -214,6 +221,8 @@ public :
 
 	void IgnorePoint(int i){ m_calhandler->CalibIgnorePoint(i); };
 	void SetPointRegion(int i, int reg){ m_calhandler->CalibSetPointRegion(i,reg); };
+
+	int GetCalibMethod() { return m_method; };
 
 private:
 	//////////////////////////////////////////////////////////////////
@@ -300,6 +309,7 @@ private:
 	int __matrix_height;
 	int __matrix_width;
 
+	int m_method; //calibration method
 };
 
 #endif
