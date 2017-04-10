@@ -1609,33 +1609,33 @@ void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int 
 	TFile * f = new TFile(fn);
 	m_inputfile.push_back( f );
 
-	// Look at the MetaData
-	TVectorF * md = static_cast<TVectorF *> ( f->Get("MetaData") );
+    // Look at the MetaData
+    TVectorF * md = static_cast<TVectorF *> ( f->Get("MetaData") );
 
-	if ( md != 0x0 ) {
-		TVectorF md1 = *md;
-		__matrix_height = md1[0];
-		__matrix_width = md1[1];
-		__matrix_size = __matrix_height * __matrix_height;
-		cout << "MetaData. Size of pad. Width = " << md1[0] << ", Height = " << md1[1] << endl;
+    if ( md != 0x0 ) {
+        TVectorF md1 = *md;
+        __matrix_height = md1[0];
+        __matrix_width = md1[1];
+        __matrix_size = __matrix_height * __matrix_height;
+        cout << "MetaData. Size of pad. Width = " << md1[0] << ", Height = " << md1[1] << endl;
 
-		if ( minpix < 0 || maxpix > __matrix_size ) {
-			cout << "[ERROR] The matrix has " << __matrix_size << "pixels. You have requested " << endl;
-			cout << "[ERROR]   a range between " << minpix << " and " << maxpix << ". Giving up ... exit(1)" << endl;
-			exit(1);
-		}
+        if ( minpix < 0 || maxpix > __matrix_size ) {
+            cout << "[ERROR] The matrix has " << __matrix_size << "pixels. You have requested " << endl;
+            cout << "[ERROR]   a range between " << minpix << " and " << maxpix << ". Giving up ... exit(1)" << endl;
+            exit(1);
+        }
 
-		if ( maxpix - minpix < 0 ) {
-			cout << "[ERROR] Request more pixels.  Zero have been scheduled for processing." << endl;
-			exit(1);
-		}
-	} else {
-		cout << "[WARNING] Can't verify metadata !!!  Running at your own risk !!!" << endl;
-		__matrix_height = 256;
-		__matrix_width = 256;
-		__matrix_size = __matrix_height * __matrix_height;
-		//cout << "Size of pad. Width = " << md1[0] << ", Height = " << md1[1] << endl;
-	}
+        if ( maxpix - minpix < 0 ) {
+            cout << "[ERROR] Request more pixels.  Zero have been scheduled for processing." << endl;
+            exit(1);
+        }
+    } else {
+        cout << "[WARNING] Can't verify metadata !!!  Running at your own risk !!!" << endl;
+        __matrix_height = 256;
+        __matrix_width = 256;
+        __matrix_size = __matrix_height * __matrix_height;
+        //cout << "Size of pad. Width = " << md1[0] << ", Height = " << md1[1] << endl;
+    }
 
 
 	// min and max pixels
@@ -1653,7 +1653,7 @@ void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int 
 	// initialize all pointers at 0
 	for (int i = 0 ; i < __matrix_size ; i++) {
 		m_kerneldensityfunctions[i] = 0x0;
-	}
+    }
 
 	// Creating histos in a std::vector
 	/*
@@ -1675,14 +1675,17 @@ void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int 
 	}
 
 	// Look at the DACs
-	TVectorF * v = static_cast<TVectorF *> ( f->Get("DACs") );
-	TVectorF v1 = *v;
-	cout << "DACs : ";
-	for (int i = 0 ; i < v1.GetNoElements() - 1 ; i++) {
-		cout << v1(i) << " " ;
-	}
-	cout << " | clock = " << v1(v1.GetNoElements() - 1) << " MHz \n";
-
+    if ( md != 0x0 ) {
+        TVectorF * v = static_cast<TVectorF *> ( f->Get("DACs") );
+        TVectorF v1 = *v;
+        cout << "DACs : ";
+        for (int i = 0 ; i < v1.GetNoElements() - 1 ; i++) {
+            cout << v1(i) << " " ;
+        }
+        cout << " | clock = " << v1(v1.GetNoElements() - 1) << " MHz \n";
+    }else{
+        cout << "[WARNING] Can't verify DACs !!!  Running at your own risk !!!" << endl;
+    }
 
 	Init(tree);
 
