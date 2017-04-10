@@ -2233,28 +2233,35 @@ double surrogatefunc_calib(double * x, double * par) {
 
 double fitfunc_lowen(double * x, double * par) {
 
-	// independent var
-	double xx = x[0];
+    // Function proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
 
-	// pars for gausian
-	double gconst = par[0];
-	double mean = par[1];
-	double sigma = par[2];
+    // independent var
+    Double_t xx = x[0]; // TOT
 
-	// surrogate ^ -1
-	double a = par[3];
-	double b = par[4];
-	double c = par[5];
-	double t = par[6];
+    // parameters for gaussian
+    Double_t gconst = par[0];
+    Double_t mean = par[1];
+    Double_t sigma = par[2];
 
-	// Sigma
-	double arg = (xx - mean)/sigma;
-	double func = gconst * TMath::Exp(-0.5*arg*arg);
+    // surrogate ^ -1
+    Double_t a = par[3];
+    Double_t b = par[4];
+    Double_t c = par[5];
+    Double_t t = par[6];
 
-	// Inverse of the surrogate
-	func += 1./ ( a * xx + b - ( c / ( xx - t ) ) );
+    // Inverse of the surrogate ( = energy in keV)
+    Double_t surrogate_inverse, delta, num1, num2, denum;
+    delta = TMath::Power((b-a*t-xx),2) - 4 * a * (xx*t-c-b*t);
+    num1 = a*t + xx - b;
+    num2 = TMath::Sqrt(delta) ;
+    denum = 2 * a;
+    surrogate_inverse = (num1 +  num2) / denum;
 
-	return func;
+    // Gaussian of the inversed surrogate
+    Double_t arg = (surrogate_inverse - mean)/sigma;
+    Double_t func = gconst * TMath::Exp(-0.5*arg*arg);
+
+    return func;
 }
 
 void TOTCalib::GetInputStats() {
