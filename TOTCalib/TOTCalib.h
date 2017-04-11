@@ -171,9 +171,10 @@ public :
 	void ReorderSources();
 
 	int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *);
+    int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *, int);    
 	TF1 * FittingFunctionSelector(double, TOTCalib *, int);
 	void GetLinearFit(double & a, double & b, vector< pair<double,double> > p);
-	void RandomFitParameters(TF1 * f, TH1 * h, int tot);
+	void RandomFitParameters(TF1 * f, TH1 * h, int tot, TOTCalib*);
 
 	vector<pair<double, double> > Extract_E_TOT_Points(int, TOTCalib * );
 	int GetNumberOf_E_TOT_Points (TOTCalib * s);
