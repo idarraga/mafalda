@@ -242,8 +242,12 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
         f->SetParameter(4, m_rand1->Rndm()*80. + 20.);
         // p5 is c. Random --> (-50, 350)
         f->SetParameter(5, m_rand1->Rndm()*400. - 50);
+        f->SetParameter(5, 58.);
+        
         // p6 is t. Random --> (1, 6)
         f->SetParameter(6, m_rand1->Rndm()*5.+1);
+        f->SetParameter(6, -1.5);
+        
         //cout<<f->GetParameter(0)<<" "<<f->GetParameter(1)<<" "<<f->GetParameter(2)<<" "<<f->GetParameter(3)<<" "<<f->GetParameter(4)<<" "<<f->GetParameter(5)<<" "<<f->GetParameter(6)<<endl;
         
         
@@ -252,9 +256,9 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
 		// p0 is the amplitude and can always be taken from the histogram
 		f->SetParameter(0, h->GetBinContent( h->FindBin(tot) ) );
 		// p1 is the mean tot and can be just the tot, or somewhere close towards to the right
-		f->SetParameter(1, m_rand1->Rndm()*m_bandwidth + tot);
+		f->SetParameter(1, m_rand1->Rndm()*local_bandwidth + tot);
 		// p2 is the sigma of the gaussian part.  Use the bandwidth
-		f->SetParameter(2, m_bandwidth);
+		f->SetParameter(2, local_bandwidth);
 
 	}
 
@@ -502,7 +506,7 @@ int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h,
 	// "Q"  Quiet
 
 	if(m_verbose >= __VER_INFO) {
-		cout << "[FIT] Fit in the interval : " << minf << ", " << maxf << " with options : " << fitconfig << endl;
+		cout << "[FIT] Fit in the interval : " << minf << ", " << maxf << " with options : " << fitconfig;
 	}
 
 	int status = -1, fittries = 0;
@@ -517,17 +521,26 @@ int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h,
 	int indexmax = 0; // Index of best fit
 	bool continueFitting = true;
 
+    Double_t a = 0.;
+    Double_t b = 0.; 
+    
+    if ( sto->linearpairs.size() >= 2 ) {
+        GetLinearFit(a,b,sto->linearpairs);
+        cout<< "Got a and b coefficients from previous gaussian fits: a="<<a<<" and b="<<b;
+    }
+    
 	//while ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) {
 	while ( continueFitting ) {
 
 		RandomFitParameters( f, h, tot, source);
 		// keep track of the parameters to choose the better set in case the fit is not good enough
 
-        if ( TString(f->GetName()).Contains("gf_lowe") ){
+        if ( TString(f->GetName()).Contains("gf_lowe") && a!=0. && b!=0.){
            f->FixParameter(1,energy);
-           f->FixParameter(3,3);
-           f->FixParameter(4,60);
-           
+           f->FixParameter(3,a);
+           f->FixParameter(4,b);
+        } else if ( TString(f->GetName()).Contains("gf_lowe")){
+           f->FixParameter(1,energy); 
         }
         
 		fittries = 0; // rewind
@@ -761,7 +774,7 @@ void TOTCalib::ReorderSources() {
     cout<<endl<<"-----------------------------------------------------------"<<endl;    
 }
 
-void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TOTCalib * s4, TString outputName) {
+void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TOTCalib * s4, TString outputName, int calibMethod) {
 
 	cout << endl << "Blender ... making all the fits" << endl;
 
@@ -773,11 +786,11 @@ void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TOTCalib * s4, TString out
 	m_allSources.push_back( s4 );
 
 
-	Blender( outputName );
+	Blender( outputName, calibMethod );
 
 }
 
-void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TString outputName) {
+void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TString outputName, int calibMethod) {
 
 	cout << endl << "Blender ... making all the fits" << endl;
 
@@ -787,11 +800,11 @@ void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TString outputName) {
 	m_allSources.push_back( s2 );
 	m_allSources.push_back( s3 );
 
-	Blender( outputName );
+	Blender( outputName, calibMethod );
 
 }
 
-void TOTCalib::Blender (TOTCalib * s2, TString outputName) {
+void TOTCalib::Blender (TOTCalib * s2, TString outputName, int calibMethod) {
 
 	cout << endl << "Blender ... making all the fits" << endl;
 
@@ -800,12 +813,12 @@ void TOTCalib::Blender (TOTCalib * s2, TString outputName) {
 	m_allSources.push_back( this );
 	m_allSources.push_back( s2 );
 
-	Blender( outputName );
+	Blender( outputName, calibMethod );
 
 }
 
 
-void TOTCalib::Blender (TString outputName) {
+void TOTCalib::Blender (TString outputName, int calibMethod) {
 
 	//
 	ReorderSources();
@@ -939,111 +952,141 @@ void TOTCalib::Blender (TString outputName) {
 			//surr->SetParLimits(2, 10, 250);
 			//surr->SetParLimits(3, 0.1, 5.0);
 
-			// "N"  Do not store the graphics function, do not draw
-			// "R"  Use the Range specified in the function range
-			// "M"  More. Improve fit results.
-			// "S"  The result of the fit is returned in the TFitResultPtr
-			// "E"  Perform better Errors estimation using Minos technique
-			// "Q"  Quiet
-			int status = -1; int initFit = 0;
-			TString fitconfig = "NRSQ";
-			if(m_verbose == __VER_DEBUG_LOOP) fitconfig = "NRS";
-			double sprob = 0.0;
-			int fit_max_rand_tries = 0;
+            if (calibMethod == __standard){
+             
+                // "N"  Do not store the graphics function, do not draw
+                // "R"  Use the Range specified in the function range
+                // "M"  More. Improve fit results.
+                // "S"  The result of the fit is returned in the TFitResultPtr
+                // "E"  Perform better Errors estimation using Minos technique
+                // "Q"  Quiet
+                int status = -1; int initFit = 0;
+                TString fitconfig = "NRSQ";
+                if(m_verbose == __VER_DEBUG_LOOP) fitconfig = "NRS";
+                double sprob = 0.0;
+                int fit_max_rand_tries = 0;
+    
+    
+                while ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) {
+    
+                    RandomFitParametersSurrogate( surr, a, b );
+                    initFit = 0;
+                    status = -1;
+    
+                    while ( status != 0 && initFit < __max_fit_tries ) {
+    
+                        TFitResultPtr fitr = g->Fit(fn, fitconfig.Data(), "");
+                        TFitResult * fitp = fitr.Get();
+                        status = fitp->Status();
+                        sprob = TMath::Prob( surr->GetChisquare()/surr->GetNDF(), surr->GetNDF() );
+                        initFit++;
+    
+                    }
+    
+                    if(m_verbose == __VER_DEBUG_LOOP) cout << "Try " << fit_max_rand_tries << " { status : " << status << " } [PROB] = " << sprob << " " << endl;
+    
+                    // Save the results of this fit
+                    calibTriesMap[fit_max_rand_tries] = vector<double>(__npars_surrogate, 0.);
+                    calibTriesProb.push_back( sprob );
+                    calibTriesStatus.push_back( status );
+                    for(int i = 0 ; i < __npars_surrogate ; i++) {
+                        calibTriesMap[fit_max_rand_tries][i] = surr->GetParameter(i);
+                    }
+    
+                    fit_max_rand_tries++;
+                }
+    
+                // If the search reached the maximum numbers of tries
+                vector<double> surr_pars(__npars_surrogate, 0.);
+    
+                if(fit_max_rand_tries == __fit_pars_randomization_max) {
+    
+                    // Search the max
+                    vector<double>::iterator iB = calibTriesProb.begin();
+                    vector<double>::iterator iE = calibTriesProb.end();
+                    vector<double>::iterator imax = max_element( iB, iE );
+                    // See what the index is
+                    vector<double>::iterator i = iB;
+                    for( ; i != iE ; i++) {
+                        if( i == imax ) break;
+                        indexmax++;
+                    }
+    
+                    // This is the best set of parameters found
+                    surr_pars[0] = calibTriesMap[indexmax][0];
+                    surr_pars[1] = calibTriesMap[indexmax][1];
+                    surr_pars[2] = calibTriesMap[indexmax][2];
+                    surr_pars[3] = calibTriesMap[indexmax][3];
+    
+                    cout << "[MAX] Pixel = " << pix << " | best fit index = " << indexmax << " | prob = " << calibTriesProb[indexmax] << " | status : " << calibTriesStatus[indexmax]
+                                                                                                                                                                            << " | a, b, c, t : "
+                                                                                                                                                                            << calibTriesMap[indexmax][0] << ", "
+                                                                                                                                                                            << calibTriesMap[indexmax][1] << ", "
+                                                                                                                                                                            << calibTriesMap[indexmax][2] << ", "
+                                                                                                                                                                            << calibTriesMap[indexmax][3] << endl;
+    
+                } else {
+    
+                    surr_pars[0] = surr->GetParameter(0);
+                    surr_pars[1] = surr->GetParameter(1);
+                    surr_pars[2] = surr->GetParameter(2);
+                    surr_pars[3] = surr->GetParameter(3);
+    
+                }
+    
+    
+                //cout << "Status : " << status << endl;
+                //cout << "p value of the fit : " << fitp->Prob() << endl;
+    
+                // Save the fit constants
+                if( ( fit_max_rand_tries == __fit_pars_randomization_max && calibTriesStatus[indexmax] == 0 ) 	 // Fit which never reached the requested C.L.
+                        || status == 0 )                                                                         // Fit which converged with high C.L.
+                {
+                    calibConst.push_back( surr_pars[0] );
+                    calibConst.push_back( surr_pars[1] );
+                    calibConst.push_back( surr_pars[2] );
+                    calibConst.push_back( surr_pars[3] );
+    
+                    calibProperties.push_back( calibTriesProb[indexmax] );
+    
+                } else {
+    
+                    calibConst.push_back( 0.0 );
+                    calibConst.push_back( 0.0 );
+                    calibConst.push_back( 0.0 );
+                    calibConst.push_back( 0.0 );
+    
+                    calibProperties.push_back( 0.0 );
+    
+                }
+                                
+            } else if (calibMethod == __jakubek){
+                
+                // In this case no fit with surrogate is needed
+                calibConst.push_back( a );
+                calibConst.push_back( b );
+                
+                // For c and t, look for the results obtained from low energy fits                
+                double c = 0.;
+                double t = 0.;
+                vector< double >::iterator st_itr;
+                int counter = 0;
+                int position = 0;
+                for(st_itr = st->pointsSave_ic.begin() ; st_itr != st->pointsSave_ic.end() ; st_itr++ ) {
+                    
+                    if ((*st_itr)!=0.){c = *st_itr; position = counter;}
+                    counter ++;
+                }
+                t = st->pointsSave_it.at(position);
+                calibConst.push_back( c );
+                calibConst.push_back( t );
 
+                calibProperties.push_back( 0.0 );
+                calibTriesProb.push_back( 0. );
+                
+                cout << " | a, b, c, t : "<< a << ", "<< b << ", "<< c << ", "<< t << ", "<<endl;
 
-			while ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) {
-
-				RandomFitParametersSurrogate( surr, a, b );
-				initFit = 0;
-				status = -1;
-
-				while ( status != 0 && initFit < __max_fit_tries ) {
-
-					TFitResultPtr fitr = g->Fit(fn, fitconfig.Data(), "");
-					TFitResult * fitp = fitr.Get();
-					status = fitp->Status();
-					sprob = TMath::Prob( surr->GetChisquare()/surr->GetNDF(), surr->GetNDF() );
-					initFit++;
-
-				}
-
-				if(m_verbose == __VER_DEBUG_LOOP) cout << "Try " << fit_max_rand_tries << " { status : " << status << " } [PROB] = " << sprob << " " << endl;
-
-				// Save the results of this fit
-				calibTriesMap[fit_max_rand_tries] = vector<double>(__npars_surrogate, 0.);
-				calibTriesProb.push_back( sprob );
-				calibTriesStatus.push_back( status );
-				for(int i = 0 ; i < __npars_surrogate ; i++) {
-					calibTriesMap[fit_max_rand_tries][i] = surr->GetParameter(i);
-				}
-
-				fit_max_rand_tries++;
-			}
-
-			// If the search reached the maximum numbers of tries
-			vector<double> surr_pars(__npars_surrogate, 0.);
-
-			if(fit_max_rand_tries == __fit_pars_randomization_max) {
-
-				// Search the max
-				vector<double>::iterator iB = calibTriesProb.begin();
-				vector<double>::iterator iE = calibTriesProb.end();
-				vector<double>::iterator imax = max_element( iB, iE );
-				// See what the index is
-				vector<double>::iterator i = iB;
-				for( ; i != iE ; i++) {
-					if( i == imax ) break;
-					indexmax++;
-				}
-
-				// This is the best set of parameters found
-				surr_pars[0] = calibTriesMap[indexmax][0];
-				surr_pars[1] = calibTriesMap[indexmax][1];
-				surr_pars[2] = calibTriesMap[indexmax][2];
-				surr_pars[3] = calibTriesMap[indexmax][3];
-
-				cout << "[MAX] Pixel = " << pix << " | best fit index = " << indexmax << " | prob = " << calibTriesProb[indexmax] << " | status : " << calibTriesStatus[indexmax]
-				                                                                                                                                                        << " | a, b, c, t : "
-				                                                                                                                                                        << calibTriesMap[indexmax][0] << ", "
-				                                                                                                                                                        << calibTriesMap[indexmax][1] << ", "
-				                                                                                                                                                        << calibTriesMap[indexmax][2] << ", "
-				                                                                                                                                                        << calibTriesMap[indexmax][3] << endl;
-
-			} else {
-
-				surr_pars[0] = surr->GetParameter(0);
-				surr_pars[1] = surr->GetParameter(1);
-				surr_pars[2] = surr->GetParameter(2);
-				surr_pars[3] = surr->GetParameter(3);
-
-			}
-
-
-			//cout << "Status : " << status << endl;
-			//cout << "p value of the fit : " << fitp->Prob() << endl;
-
-			// Save the fit constants
-			if( ( fit_max_rand_tries == __fit_pars_randomization_max && calibTriesStatus[indexmax] == 0 ) 	 // Fit which never reached the requested C.L.
-					|| status == 0 )                                                                         // Fit which converged with high C.L.
-			{
-				calibConst.push_back( surr_pars[0] );
-				calibConst.push_back( surr_pars[1] );
-				calibConst.push_back( surr_pars[2] );
-				calibConst.push_back( surr_pars[3] );
-
-				calibProperties.push_back( calibTriesProb[indexmax] );
-
-			} else {
-
-				calibConst.push_back( 0.0 );
-				calibConst.push_back( 0.0 );
-				calibConst.push_back( 0.0 );
-				calibConst.push_back( 0.0 );
-
-				calibProperties.push_back( 0.0 );
-
-			}
+            }           
 
 			// delete the function and TGraph
 			delete surr;

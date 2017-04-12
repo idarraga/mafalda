@@ -161,11 +161,16 @@ public :
 	bool PixelInBadPixelList(int pix);
 	vector<int> GetBadPixelList() { return m_badPixelList; };
 
-	void Blender(TOTCalib * , TOTCalib *, TOTCalib *, TString);
-	void Blender(TOTCalib * , TOTCalib *, TString);
-	void Blender(TOTCalib * s2, TString outputName);
-
-	void Blender(TString);
+	void Blender(TOTCalib * , TOTCalib *, TOTCalib *, TString, int = 0);
+	void Blender(TOTCalib * , TOTCalib *, TString, int = 0);
+	void Blender(TOTCalib * s2, TString outputName, int = 0);
+	void Blender(TString, int = 0);
+    
+    // Methods for calibration
+    enum {
+        __standard = 0,
+        __jakubek // Method proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+    };
 
 	void ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
 	void ReorderSources();
