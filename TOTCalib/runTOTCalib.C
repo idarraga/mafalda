@@ -31,7 +31,8 @@ void runTOTCalib (  ) {
 
 	// Process one source ///////////////////////////////////////////////////////////////////////////////////////////
 	TOTCalib * pFe55 = new TOTCalib("/home/idarraga/analysis/mafalda/mafalda_framework/MAFOutput_MPXNtuple_Timepix3UofH_Calib_Fe55_set9.root",
-									"Fe55", minpix, maxpix, 20, nTotalFrames);
+									"Fe55", minpix, maxpix, 20, nTotalFrames, TOTCalib::__standard);
+	// Use TOTCalib::__lowStats for alternative calibration method
 	//pFe55->SetVerboseLevel(TOTCalib::__VER_DEBUG);
 	pFe55->SetKernelBandWidth(2); // Kernel Bandwidth
 	pFe55->Loop(); // Run this source
@@ -40,11 +41,12 @@ void runTOTCalib (  ) {
 
 	// Process one source ///////////////////////////////////////////////////////////////////////////////////////////
 	TOTCalib * pAm241PlusSn = new TOTCalib("/home/idarraga/analysis/mafalda/mafalda_framework/MAFOutput_MPXNtuple_Timepix3UofH_Calib_Am241PlusSn_set9.root",
-									 "Am241CutLow_Plus_SnFluo", minpix, maxpix, 50, nTotalFrames);
+									 "Am241CutLow_Plus_SnFluo", minpix, maxpix, 50, nTotalFrames, TOTCalib::__standard);
 	//pAm241->SetVerboseLevel(TOTCalib::__VER_DEBUG);
 	pAm241PlusSn->SetKernelBandWidth(3); // Kernel Bandwidth
 	pAm241PlusSn->Loop(); // Run this source
 	pAm241PlusSn->GetInputStats();
+	//pAm241PlusSn->IgnorePoint(0); // Use this to ignore one of source's energy peaks in the surrogate function's fit
 
 	// Mix and produce calibration //////////////////////////////////////////////////////////////////////////////////
 	// Blend the results and get the surrogate functions.

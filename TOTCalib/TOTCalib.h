@@ -206,12 +206,13 @@ public :
 	enum {
 		__VER_DEBUG_LOOP = 0,
 		__VER_DEBUG,
-		__VER_INFO
+		__VER_INFO,
+		__VER_QUIET
 	};
 
 	enum { //calibration method
 		__standard = 0,
-		__lowStats,
+		__lowStats
 	};
 
 	double GetKernelBandWidth(){ return m_bandwidth; };
@@ -223,6 +224,18 @@ public :
 	void SetPointRegion(int i, int reg){ m_calhandler->CalibSetPointRegion(i,reg); };
 
 	int GetCalibMethod() { return m_method; };
+
+	vector<vector<double> > Get_m_histo(){return m_calibhistos;}; // each pixel has its own histogram
+	void SetGlobalHisto(vector<double> v){m_globalhisto=v;}; // every histogram are merged in this vector
+
+	void SetGlobalCriticalPoints(vector<double> max, vector<double> min){ 
+		m_global_max=max;
+		m_global_min=min;	};
+	vector<double> GetGlobalMaximumPoints(){return m_global_max;};
+	vector<double> LowStatsPeakSelection( vector<double> peaks, unsigned int s, TOTCalib * source, double bandwidth);
+
+	void CreateGlobalKernelAndGetCriticalPoints(); 
+
 
 private:
 	//////////////////////////////////////////////////////////////////
@@ -310,6 +323,10 @@ private:
 	int __matrix_width;
 
 	int m_method; //calibration method
+
+	vector<double> m_globalhisto;	
+	vector<double> m_global_max; // Critical points of the whole map kernel
+	vector<double> m_global_min; //
 };
 
 #endif

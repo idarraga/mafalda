@@ -51,8 +51,9 @@ void TOTCalib::Loop()
 
 	Long64_t nbytes = 0, nb = 0;
 
-	TCanvas * c2 = new TCanvas("histo" + TString( m_calhandler->GetSourcename()) );
-	c2->cd();
+	// these lines open blank canvas
+	//TCanvas * c2 = new TCanvas("histo" + TString( m_calhandler->GetSourcename()) );
+	//c2->cd();
 
 	// prepare output ROOT
 	// m_output_root = new TFile("output_calib.root", "RECREATE");
@@ -257,6 +258,55 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
 
 }
 
+vector<double> TOTCalib::LowStatsPeakSelection( vector<double> peaks,unsigned int size, TOTCalib * source, double bandwidth){ //EDIT:JS019
+	vector<double> global_p = source->GetGlobalMaximumPoints();
+	vector<double> selected_p;
+
+	unsigned int i = 0;
+
+	if (m_verbose != __VER_QUIET){
+		cout << "[INFO] ----- Low Stats Peak Selection -----" << endl;
+		cout << "Expected " << size << " peaks. | Peaks found : " ;
+		for (vector<double>::iterator k=peaks.begin(); k!=peaks.end() ; k++){ cout << (*k) << "  "; }
+		cout << endl << "Global kernel function's maximums : ";
+		for (vector<double>::iterator l=global_p.begin(); l !=global_p.end() ; l++){ cout << (*l) << "  ";}
+		cout << endl;
+	}
+
+
+	if (global_p.size() != size){
+		cout << "[ERROR] The expected number of peaks is not equal to the number of maximums in the global kernel function!" <<endl;
+		cout << "Try to work with more pixels in your next run." << endl;
+		return selected_p; // return empty
+	}
+
+	for ( ; i<global_p.size() ; i++){
+		unsigned int j = 0;
+		vector<double> diff;
+
+		for ( ; j<peaks.size(); j++){
+			diff.push_back(TMath::Abs( peaks[j] - global_p[i] ));
+		}
+
+		int min_ind = distance (diff.begin(), min_element(diff.begin(),diff.end()) );
+		
+        if (diff[min_ind] > bandwidth*2.){
+            cout << "[ERROR] Selected peak is too far from the global kernel function's maximum (bandwidth*2 = "<< bandwidth*2 <<"). Selection cancelled." << endl;
+			return selected_p; // return empty
+		}
+
+		selected_p.push_back(peaks[min_ind]);
+	}
+
+	if (m_verbose != __VER_QUIET){
+		cout << "Selected peaks : ";
+		for (vector<double>::iterator m = selected_p.begin() ; m!= selected_p.end() ; m++){cout << (*m) << "  ";}
+		cout << endl;
+	}
+
+	return selected_p;
+}
+
 int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, store * sto) {
 
 	// This was a suggestion but didn't quite work correctly.
@@ -265,42 +315,52 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 	// GetLinearFit(a, b, sto->linearpairs);
 	// if(m_verbose == __VER_DEBUG) cout << " -- NOT USED -- a = " << a << ", b = " << b << endl;
 
-	double loc_bandwidth = src->GetKernelBandWidth(); 
-	double minf = tot - loc_bandwidth;
-	double maxf = tot + loc_bandwidth;
+	double loc_bandwidth = src->GetKernelBandWidth();
+	double minf;
+	double maxf;
 
-	int centerBin = h->FindBin(tot);
-	double heightAtKernelHint = h->GetBinContent(centerBin);
+	if (src->GetCalibMethod() == __lowStats){ // optimized fit interval
+		minf = tot - 2*loc_bandwidth;
+		maxf = tot + 2*loc_bandwidth;
 
-	unsigned int nBins = h->GetXaxis()->GetNbins();
-	unsigned int rightBin = h->FindBin( maxf );
-	unsigned int leftBin = h->FindBin( minf );
+	} else { // standard fit interval
 
-	int underThresholdCntr = 0;
-	for(unsigned int i=centerBin; i<=nBins; ++i ) {
-		if( h->GetBinContent(i) < heightAtKernelHint * __fraction_of_height_range_id ) {
-			underThresholdCntr++;
-			rightBin = i;
-			if(underThresholdCntr > 1) break;
+		minf = tot - loc_bandwidth;
+		maxf = tot + loc_bandwidth;
+
+		int centerBin = h->FindBin(tot);
+		double heightAtKernelHint = h->GetBinContent(centerBin);
+
+		unsigned int nBins = h->GetXaxis()->GetNbins();
+		unsigned int rightBin = h->FindBin( maxf );
+		unsigned int leftBin = h->FindBin( minf );
+
+		int underThresholdCntr = 0;
+		for(unsigned int i=centerBin; i<=nBins; ++i ) {
+			if( h->GetBinContent(i) < heightAtKernelHint * __fraction_of_height_range_id ) {
+				underThresholdCntr++;
+				rightBin = i;
+				if(underThresholdCntr > 1) break;
+			}
 		}
-	}
-	underThresholdCntr = 0;
-	for(unsigned int i=centerBin; i>1; --i ) {
-		if( h->GetBinContent(i) < heightAtKernelHint * __fraction_of_height_range_id ) {
-			underThresholdCntr++;
-			leftBin = i;
-			if(underThresholdCntr > 1) break;
+		underThresholdCntr = 0;
+		for(unsigned int i=centerBin; i>1; --i ) {
+			if( h->GetBinContent(i) < heightAtKernelHint * __fraction_of_height_range_id ) {
+				underThresholdCntr++;
+				leftBin = i;
+				if(underThresholdCntr > 1) break;
+			}
 		}
+		// take one more
+		if(rightBin < nBins) rightBin++;
+		if(leftBin > 1) leftBin--;
+
+		// define maxf and minf
+		maxf = h->GetBinCenter(rightBin);
+		minf = h->GetBinCenter(leftBin);
+
+		//int width = rightBin - centerBin;
 	}
-	// take one more
-	if(rightBin < nBins) rightBin++;
-	if(leftBin > 1) leftBin--;
-
-	// define maxf and minf
-	maxf = h->GetBinCenter(rightBin);
-	minf = h->GetBinCenter(leftBin);
-
-	//int width = rightBin - centerBin;
 
 
 	if( TString(f->GetName()).Contains("gf_lowe") ) {
@@ -348,6 +408,10 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 		fittries = 0; // rewind
 		status = -1;
 		while ( status != 0 && fittries < __max_fit_tries ) {
+			if (src->GetCalibMethod() == __lowStats){
+				f->FixParameter(1,tot); // fix mean of the gaussian (otherwise incorrect fit in most cases)
+				f->SetParLimits(2,0, 1.5*loc_bandwidth); // set a max value for sigma (otherwise incorrect in most cases)
+			}
 
 			TFitResultPtr fitr = h->Fit(f, fitconfig.Data(), "" , minf, maxf);
 			status = int ( fitr );
@@ -503,14 +567,8 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 				}
 
 			}
-		constantfit = gf->GetParameter(0);
-		totmeanfit = gf->GetParameter(1);
-		sigmafit = TMath::Abs ( gf->GetParameter(2) );
-		g->SetPoint(cntr, (*i).first, totmeanfit ); // E, TOT (from the fit in this context)
-		g->SetPointError(cntr, 0., sigmafit );
-		cntr++;
 
-		sto->pointsSave.push_back( make_pair( (*i).first, totmeanfit ) );  // The mean of the fit
+		sto->pointsSave.push_back( make_pair( (*EpointItr).second, totmeanfit ) );  // The mean of the fit; negative values may be saved to know which peak has been ignored
 		sto->pointsSaveSigmas.push_back( sigmafit );                       // The sigma of the fit
 		sto->pointsSaveConstants.push_back( constantfit );                 // The constant of the fit
 		sto->calibTOTPeaks.push_back( totval );                            // The original TOT val where the fit starts
@@ -535,6 +593,7 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 			sto->linearpairs.push_back( make_pair( (*i).first , totmeanfit ) );  // (E, TOT)
 		}
 		regionItr++;
+		EpointItr++;
 		//////////////////////////////////////////////////////////////////
 
 		if(m_verbose == __VER_DEBUG) {
@@ -595,6 +654,100 @@ void TOTCalib::ReorderSources() {
 
 }
 
+void TOTCalib::CreateGlobalKernelAndGetCriticalPoints(){ 
+
+
+	//Create histogram (a vector, not a TH1) for the global spectrum of each source (whole map, not single pixels)
+	vector<TOTCalib *>::iterator itr = m_allSources.begin();
+	for ( ; itr!=m_allSources.end() ; itr++){
+		
+		int method = (*itr)->GetCalibMethod();
+		if (method != __lowStats) continue;
+
+		if (m_verbose !=__VER_QUIET) {
+            cout << "[INFO]	Gathering critical points for the whole pixel selection " << endl;
+        }
+		int nbins = (*itr)->GetNBins();
+
+        vector<vector<double> > m_histo = (*itr)->Get_m_histo();
+		vector<double> global_ker(nbins,0.);
+
+		for (int pix = m_minpix ; pix <= m_maxpix ; pix++) {
+			vector<double> temp = m_histo[pix];
+			vector<double>::iterator i = temp.begin();
+			int cntr = 0;
+
+			for ( ; i!=temp.end() ; i++){
+				global_ker[cntr] += *i;
+				cntr++;
+			}
+		}
+
+		(*itr)->SetGlobalHisto(global_ker);
+
+		//from CreateKernelDensityFunction()
+		//create the global kernel density function for each source
+
+		double * par = new double[nbins * 3 + 1];
+		par[0] = nbins;
+		double bandwidth = (*itr)->GetKernelBandWidth();
+
+		int j = 1;
+		for ( ; j <= nbins ; j++ ) {
+			par[j] = global_ker[j-1] / bandwidth; // constant
+			par[j + nbins] = j-1; // mean
+			par[j + 2*nbins] = bandwidth; // sigma
+		}
+
+		TString kernelname = "global_kernel_";
+		kernelname += (*itr)->GetCalibHandler()->GetSourcename();
+		TF1 * fker = new TF1(kernelname, GausFuncAdd, 0, nbins, 3 * nbins + 1);
+		fker->SetParameters( par );
+
+		//from GetCriticalPoints()
+		//find the maximum and minimum of the global kernel
+
+		short sign = __s_pos;
+	
+		double der = 0.;
+		double step = 1.;
+		vector<double> temp_max;
+		vector<double> temp_min;
+		for (double x = 1. ; x <= (double)nbins ; x+= step) {
+	
+			//der = f->Derivative(x, 0x0, 0.1);
+			der = DerivativeFivePointsStencil(fker, x, 0.1);
+	
+			if(der < 0 && sign == __s_pos) { // Flip from pos to neg --> maximum
+				temp_max.push_back( x ); // Critical point here
+			}
+			if(der > 0 && sign == __s_neg) { // Flip from neg to pos --> minimum
+				temp_min.push_back( x );  // Critical point here
+			}
+	
+			if(der > 0) sign = __s_pos;
+			if(der < 0) sign = __s_neg;
+
+		}
+
+		(*itr)->SetGlobalCriticalPoints(temp_max,temp_min);
+
+		if (m_verbose !=__VER_QUIET) {
+            cout << "Source : " << (*itr)->GetCalibHandler()->GetSourcename() << endl;
+            cout << "Maximum (" <<temp_max.size()<< ") : ";
+            for (vector<double>::iterator k = temp_max.begin() ; k!=temp_max.end() ; k++){ cout << *k << " " ;}
+
+            cout << endl << "Minimum (" <<temp_min.size()<< ") : ";
+        	for (vector<double>::iterator k = temp_min.begin() ; k!=temp_min.end() ; k++){ cout << *k << " " ;}
+        	cout << endl << "-------------------------" << endl;
+        }
+	
+		delete fker; 
+		temp_min.clear(); temp_max.clear();
+
+	}
+}
+
 void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TOTCalib * s4, TString outputName) {
 
 	cout << endl << "Blender ... making all the fits" << endl;
@@ -642,6 +795,7 @@ void TOTCalib::Blender (TString outputName) {
 
 	//
 	ReorderSources();
+	CreateGlobalKernelAndGetCriticalPoints(); // will only be used for sources with m_method == __lowStats
 
 	// Files to write
 	TString fn_a = outputName + "_a.txt";
@@ -1067,7 +1221,7 @@ TF1 * TOTCalib::GetSurrogateFunction(int pix) {
 	return surr;
 }
 
-// The the number of expected points
+// The number of expected points
 int TOTCalib::GetNumberOf_E_TOT_Points (TOTCalib * s) { // returns every point defined for a source, even ignored points
 
 	map<int, double> calibPoints = s->GetCalibHandler()->GetCalibPoints();
@@ -1136,7 +1290,7 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 	map<int, vector<double> > s_tot = s->GetMaxPeaksIdentified();
 	vector<double> peaks = s_tot[pix];
 
-	cout << "N peaks found = " << peaks.size() << endl;
+	cout << "Pixel : " << pix << " | Source : " << s->GetCalibHandler()->GetSourcename() << " | N peaks found = " << peaks.size() ;
 	double loc_bandwidth = s->GetKernelBandWidth(); 
 
 	// This is coming from the kernel funciton
@@ -1148,12 +1302,12 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 	// These are the calib points expected per source
 	map<int, double> calibPoints = s->GetCalibHandler()->GetCalibPoints();
 
-	cout << "Calib points = " << calibPoints.size() << " | ";
+	cout << " | Calib points = " << calibPoints.size() << endl;
 
 	// If this situation is present determine which peaks to remove
 	// remove as many as necesary
-	while( peaks.size() > calibPoints.size() ) {
-
+	if (s->GetCalibMethod() == __lowStats && peaks.size()> calibPoints.size() ) peaks = LowStatsPeakSelection(peaks, calibPoints.size(), s, loc_bandwidth); // better peak selection
+	while( peaks.size() > calibPoints.size() ) { // regular peak selection, should probably be modified
 		TH1I * th = s->GetHisto(pix, "test");
 		vector<double> integ;
 		int npeaks = (int)peaks.size();
@@ -1171,8 +1325,8 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 			peaks.erase( peaks.begin() );
 		}
 
+		delete th;
 	}
-	cout << endl;
 
 	// Resulting points ( E , TOT )
 	vector<pair<double, double> > points;
@@ -1708,14 +1862,18 @@ void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int 
 		m_calibhistos.push_back( vector<double> (m_nbins, 0.) );
 	}
 
-	// Look at the DACs
-	TVectorF * v = static_cast<TVectorF *> ( f->Get("DACs") );
-	TVectorF v1 = *v;
-	cout << "DACs : ";
-	for (int i = 0 ; i < v1.GetNoElements() - 1 ; i++) {
-		cout << v1(i) << " " ;
-	}
-	cout << " | clock = " << v1(v1.GetNoElements() - 1) << " MHz \n";
+ 	// Look at the DACs
+    if ( md != 0x0 ) {
+        TVectorF * v = static_cast<TVectorF *> ( f->Get("DACs") );
+        TVectorF v1 = *v;
+        cout << "DACs : ";
+        for (int i = 0 ; i < v1.GetNoElements() - 1 ; i++) {
+            cout << v1(i) << " " ;
+        }
+        cout << " | clock = " << v1(v1.GetNoElements() - 1) << " MHz \n";
+    }else{
+        cout << "[WARNING] Can't verify DACs !!!  Running at your own risk !!!" << endl;
+    }
 
 
 	Init(tree);
@@ -2077,8 +2235,8 @@ void TOTCalib::DrawFullPixelCalib(int pix) {
 			if ( i == 1 ) parS = "b = ";
 			if ( i == 2 ) parS = "c = ";
 			if ( i == 3 ) parS = "t = ";
-			parS += TString::Format("%.2f +/- %.2f", s->GetParameter(i), s->GetParError(i) );
-			l2->DrawLatex(maxel_x/2, maxel_y * (1 - (i/10.)), parS);
+			parS += TString::Format("%.2f"/* +/- %.2f*/, s->GetParameter(i)/*, s->GetParError(i) */); 	// error on fit parameters is not computed
+			l2->DrawLatex(maxel_x/2, maxel_y * (1 - (i/10.)), parS); 									// maybe add soon?
 		}
 
 		//
