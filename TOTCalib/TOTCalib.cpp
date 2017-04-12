@@ -51,8 +51,8 @@ void TOTCalib::Loop()
 
 	Long64_t nbytes = 0, nb = 0;
 
-	TCanvas * c2 = new TCanvas("histo" + TString( m_calhandler->GetSourcename()) );
-	c2->cd();
+//	TCanvas * c2 = new TCanvas("histo" + TString( m_calhandler->GetSourcename()) );
+//	c2->cd();
 
 	// prepare output ROOT
 	// m_output_root = new TFile("output_calib.root", "RECREATE");
