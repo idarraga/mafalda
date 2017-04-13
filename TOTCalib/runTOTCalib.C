@@ -3,10 +3,18 @@
  *  TOT calibration for a Timepix/Timepix3 device
  */
 
+// Tip: execute macro using -b (batch mode) option:
+// $ root -l -q -b runTOTCalib.C)
+// to avoid problems with X11 when running with tmux from server. (else
+// progam crashes at the end if connection was lost and root file is not
+// written correctly).
+
 #include <TH2I.h>
 #include <TString.h>
 #include <TROOT.h>
 #include <TSystem.h>
+#include "TOTCalib.h"
+
 
 #include <vector>
 
@@ -18,51 +26,62 @@ class TOTCalib;
 int nTotalFrames;
 int minpix; int maxpix;
 
-R__LOAD_LIBRARY(libTOTCalib) // ROOT6 (cling)
+R__LOAD_LIBRARY(libTOTCalib.so); // ROOT6 (cling)
 
 void runTOTCalib (  ) {
 
-	nTotalFrames = -1;            	 // -1: run all frames in input dataset
-	//minpix = 0; maxpix = 256*256;  // Work on this set of pixels
-	minpix = 32741; maxpix = 32760;  // Work on this set of pixels
+    nTotalFrames = -1;            	 // -1: run all frames in input dataset
+    //minpix = 0; maxpix = 256*256-1;  // Work on this set of pixels
+    minpix = 3000; maxpix = 3005;  // Work on this set of pixels
 
-	// Load calibration library
-	gSystem->Load("libTOTCalib.so");
+    // Load calibration library
+    //gSystem->Load("libTOTCalib.so");
 
-	// Process one source ///////////////////////////////////////////////////////////////////////////////////////////
-	TOTCalib * pFe55 = new TOTCalib("/home/idarraga/analysis/mafalda/mafalda_framework/MAFOutput_MPXNtuple_Timepix3UofH_Calib_Fe55_set9.root",
-									"Fe55", minpix, maxpix, 20, nTotalFrames);
-	//pFe55->SetVerboseLevel(TOTCalib::__VER_DEBUG);
-	pFe55->SetKernelBandWidth(2); // Kernel Bandwidth
-	pFe55->Loop(); // Run this source
-	pFe55->GetInputStats();
-	pFe55->SetGlobalThresholdEnergyAndErr(4.14, 0.414);
+    TString server = "/lcg/storage13/atlas/medipix/DATA/2017/2017_02_PRAGUE_GaAs500_E06W0203/";
+    TString local = " /Users/thomasbilloud/workspace/DATA/MAFOutput/2017-02-GaAs500-E06W0203/";
 
-	// Process one source ///////////////////////////////////////////////////////////////////////////////////////////
-	TOTCalib * pAm241PlusSn = new TOTCalib("/home/idarraga/analysis/mafalda/mafalda_framework/MAFOutput_MPXNtuple_Timepix3UofH_Calib_Am241PlusSn_set9.root",
-									 "Am241CutLow_Plus_SnFluo", minpix, maxpix, 50, nTotalFrames);
-	//pAm241->SetVerboseLevel(TOTCalib::__VER_DEBUG);
-	pAm241PlusSn->SetKernelBandWidth(3); // Kernel Bandwidth
-	pAm241PlusSn->Loop(); // Run this source
-	pAm241PlusSn->GetInputStats();
+    // Process one source ///////////////////////////////////////////////////////////////////////////////////////////
+    TOTCalib * pCd = new TOTCalib(local+"MAFOutput_MPXNtuple_Cd_-300V.root","Cd-fluo",minpix, maxpix, 180, nTotalFrames);
+    //pCd->SetVerboseLevel(TOTCalib::__VER_DEBUG_LOOP);
+    pCd->SetVerboseLevel(TOTCalib::__VER_INFO);
+    //pCd->SetVerboseLevel(TOTCalib::__VER_DEBUG);
+    //pCd->SetVerboseLevel(TOTCalib::__VER_QUIET);
+    pCd->SetKernelBandWidth(10.); // Kernel Bandwidth - Should be as close as possible to gaussian sigma
+    pCd->Loop(); // Run this source
+//    pCd->SavePixelResolution();
+//    //pCd->GetInputStats();
+//    //pCd->SetGlobalThresholdEnergyAndErr(3.93,1.0);
 
-	// Mix and produce calibration //////////////////////////////////////////////////////////////////////////////////
-	// Blend the results and get the surrogate functions.
-	// This member function prints out the set of parameters
-	// a,b,c,t to separate output files.
-	pFe55->Blender(pAm241PlusSn, "Timepix3");
+    // Process one source ///////////////////////////////////////////////////////////////////////////////////////////
+    TOTCalib * pAm = new TOTCalib(local+"MAFOutput_MPXNtuple_Am_-300V.root","Am241", minpix, maxpix, 350, nTotalFrames);
+    pAm->SetKernelBandWidth(20.); // Kernel Bandwidth
+    pAm->Loop(); // Run this source
+    //pAm->GetInputStats();
 
-	// Partial report ///////////////////////////////////////////////////////////////////////////////////////////////
-	// Draw full info for a few pixels.  You can run this interactively in CINT too
-	// root [2] pFe55->DrawFullPixelCalib(50051);
-	int reportCntr = 0;
-	for(int i = minpix; i < maxpix ; i++){
-		pFe55->DrawFullPixelCalib( i );
-		if(reportCntr++ > 5) break; // make only 5 reports
-	}
+    // Process one source ///////////////////////////////////////////////////////////////////////////////////////////
+    TOTCalib * pFe = new TOTCalib(local+"MAFOutput_MPXNtuple_Fe_-300V.root","Fe55", minpix, maxpix, 100, nTotalFrames);
+    pFe->SetKernelBandWidth(10.); // Kernel Bandwidth
+    pFe->Loop(); // Run this source
 
-	// Use the blender object to write a root file with fit information
-	//pFe55->Finalize();
+
+    // Mix and produce calibration //////////////////////////////////////////////////////////////////////////////////
+    // Blend the results and get the surrogate functions.
+    // This member function prints out the set of parameters
+    // a,b,c,t to separate output files.
+    pCd->Blender(pAm,pFe,"TestGaAs500", TOTCalib::__jakubek);
+
+//    // Partial report ///////////////////////////////////////////////////////////////////////////////////////////////
+//    // Draw full info for a few pixels.  You can run this interactively in CINT too
+      //pCd->DrawFullPixelCalib_2(3000);
+//    //pCd->DrawFullPixelCalib(32746);
+    int reportCntr = 0;
+    for(int i = minpix; i <= maxpix ; i++){
+        pCd->DrawFullPixelCalib( i );
+        if(reportCntr++ > 5) break; // make only 5 reports
+    }
+
+    // Use the blender object to write a root file with fit information
+    pCd->Finalize();
 
 }
 
