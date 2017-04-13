@@ -64,6 +64,9 @@ public:
 	map<int, int> GetCalibPointsRegion(){ return m_calibPointsRegion; };
 	double GetOneEnergyMatch(int i){return m_calibPoints[i]; };
 
+	void CalibIgnorePoint(int i){ m_calibPoints[i]*= -1; };
+	void CalibSetPointRegion(int i, int reg){ m_calibPointsRegion[i] = reg; }
+
 	enum {
 		__linear_reg = 0,
 		__lowenergy_reg,
@@ -108,10 +111,10 @@ public :
 	//TTree * m_tree;
 
 	TOTCalib();
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames);
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *);
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int);
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *, int);
 
-	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames);
+	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int);
 
 	virtual ~TOTCalib();
 	virtual Int_t    Cut(Long64_t entry);
@@ -173,16 +176,18 @@ public :
     };
 
 	void ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
+	void ProcessOneSourceLowStats(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
 	void ReorderSources();
 
 	int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *);
     int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *, int);    
 	TF1 * FittingFunctionSelector(double, TOTCalib *, int);
 	void GetLinearFit(double & a, double & b, vector< pair<double,double> > p);
-	void RandomFitParameters(TF1 * f, TH1 * h, int tot, TOTCalib*);
+	void RandomFitParameters(TF1 * f, TH1 * h, int tot, TOTCalib *);
 
 	vector<pair<double, double> > Extract_E_TOT_Points(int, TOTCalib * );
 	int GetNumberOf_E_TOT_Points (TOTCalib * s);
+	int GetNumberOf_E_TOT_Points_Positive (TOTCalib * s);
 
 	double DerivativeFivePointsStencil(TF1 *, double, double);
 	double VectorSum(vector<double>);
@@ -207,13 +212,36 @@ public :
 	enum {
 		__VER_DEBUG_LOOP = 0,
 		__VER_DEBUG,
-		__VER_INFO
+		__VER_INFO,
+		__VER_QUIET
+	};
+
+	enum { //calibration method
+		__standard = 0,
+		__lowStats
 	};
 
 	double GetKernelBandWidth(){ return m_bandwidth; };
 	double SetKernelBandWidth(double b) {return m_bandwidth = b; };
 
 	int GetNBins() { return m_nbins; };
+
+	void IgnorePoint(int i){ m_calhandler->CalibIgnorePoint(i); };
+	void SetPointRegion(int i, int reg){ m_calhandler->CalibSetPointRegion(i,reg); };
+
+	int GetCalibMethod() { return m_method; };
+
+	vector<vector<double> > Get_m_histo(){return m_calibhistos;}; // each pixel has its own histogram
+	void SetGlobalHisto(vector<double> v){m_globalhisto=v;}; // every histogram are merged in this vector
+
+	void SetGlobalCriticalPoints(vector<double> max, vector<double> min){ 
+		m_global_max=max;
+		m_global_min=min;	};
+	vector<double> GetGlobalMaximumPoints(){return m_global_max;};
+	vector<double> LowStatsPeakSelection( vector<double> peaks, unsigned int s, TOTCalib * source, double bandwidth);
+
+	void CreateGlobalKernelAndGetCriticalPoints(); 
+
 
 private:
 	//////////////////////////////////////////////////////////////////
@@ -300,6 +328,11 @@ private:
 	int __matrix_height;
 	int __matrix_width;
 
+	int m_method; //calibration method
+
+	vector<double> m_globalhisto;	
+	vector<double> m_global_max; // Critical points of the whole map kernel
+	vector<double> m_global_min; //
 };
 
 #endif
