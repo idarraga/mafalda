@@ -169,10 +169,10 @@ void TOTCalib::GetLinearFit(double & a, double & b, vector<pair<double,double> >
 
 	int N = (int) p.size();
 	TGraph * g = new TGraph(N);
-	if(m_verbose == __VER_DEBUG) cout << "Linear fit using : ";
+	if(m_verbose == __VER_DEBUG || m_verbose == __VER_INFO) cout << "Linear fit using : ";
 	for( int i = 0 ; i < N ; i++ ) {
 		g->SetPoint( i, p[i].first, p[i].second );
-		if(m_verbose == __VER_DEBUG) cout << "(" << p[i].first << ", " <<  p[i].second << ") ";
+		if(m_verbose == __VER_DEBUG || m_verbose == __VER_INFO) cout << "(" << p[i].first << ", " <<  p[i].second << ") ";
 	}
 	cout << endl;
 
@@ -516,7 +516,7 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 	return status;
 }
 
-int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h, store * sto, int energy) {
+int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h, store * sto, double energy) {
 
 	double minf = tot - m_bandwidth;
 	double maxf = tot + m_bandwidth;
@@ -571,7 +571,7 @@ int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h,
 	// "Q"  Quiet
 
 	if(m_verbose >= __VER_INFO) {
-		cout << "[FIT] Fit in the interval : " << minf << ", " << maxf << " with options : " << fitconfig;
+		cout << "[FIT] Fit in the interval : " << minf << ", " << maxf << " with options : " << fitconfig<<endl;
 	}
 
 	int status = -1, fittries = 0;
@@ -591,7 +591,7 @@ int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h,
     
     if ( sto->linearpairs.size() >= 2 ) {
         GetLinearFit(a,b,sto->linearpairs);
-        cout<< "Got a and b coefficients from previous gaussian fits: a="<<a<<" and b="<<b;
+        cout<< "Got a and b coefficients from previous gaussian fits: a="<<a<<" and b="<<b<<endl;
     }
     
 	//while ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) {
@@ -700,9 +700,6 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 	map<int, int> region = s->GetCalibHandler()->GetCalibPointsRegion();
 	map<int, int>::iterator regionItr = region.begin();
     
-    map<int, double> Epoint = s->GetCalibHandler()->GetCalibPoints(); 
-	map<int, double>::iterator EpointItr = Epoint.begin();
-
 	map<int, double> Epoint = s->GetCalibHandler()->GetCalibPoints(); // energies in this vector may be < 0 (to skip)
 	map<int, double>::iterator EpointItr = Epoint.begin();
 
@@ -775,7 +772,7 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 		//////////////////////////////////////////////////////////////////
 		// Verify if this fit has been requested for the linear region
 		// cout << "[REGION] Calib region : " << (*regionItr).first << " --> " << (*regionItr).second << endl;
-		if ( (*regionItr).second == CalibHandler::__linear_reg ) {
+		if ( (*regionItr).second == CalibHandler::__linear_reg && (*EpointItr).second > 0. ) {
 			sto->linearpairs.push_back( make_pair( (*i).first , totmeanfit ) );  // (E, TOT)
 		}
 		regionItr++;
@@ -2304,7 +2301,7 @@ void TOTCalib::DrawFullPixelCalib(int pix) {
 
 		// Data
 		h = m_allSources[sour]->GetHisto(pix, "summary");
-		h->Draw("");
+		h->Draw("HIST");
 		h->GetXaxis()->SetTitle("TOT");
 		h->GetYaxis()->SetTitle("entries");
 
@@ -2586,7 +2583,15 @@ CalibHandler::CalibHandler (string source) {
 		m_calibPoints[0] = 23.1; //
 		m_calibPointsRegion[0] = __linear_reg;
 
-	} else if ( ! TString(source).CompareTo( "Cu_fluo", TString::kIgnoreCase )
+	} else if ( ! TString(source).CompareTo( "Cd_fluo_TPXGaAs", TString::kIgnoreCase )
+    ) {
+        
+        m_calibPoints[0] = 10.5; // K-alpha peak of As
+        m_calibPointsRegion[0] = __linear_reg;
+        m_calibPoints[1] = 23.1; // K-alpha peak of Cd 
+        m_calibPointsRegion[1] = __linear_reg;
+
+    } else if ( ! TString(source).CompareTo( "Cu_fluo", TString::kIgnoreCase )
 			||
 			! TString(source).CompareTo( "Cu-fluo", TString::kIgnoreCase )
 			||

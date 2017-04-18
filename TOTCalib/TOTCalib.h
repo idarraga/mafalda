@@ -39,7 +39,7 @@ using namespace std;
 #define __npars_surrogate			    4
 #define __npars_lowe_fitfunc            7
 #define __min_tmathprobtest_val      0.90
-#define __max_fit_tries                10
+#define __max_fit_tries                1000
 #define __fit_pars_randomization_max 1000
 #define __fit_pars_randomization_min   20
 
@@ -77,7 +77,7 @@ private:
 
 
 	// TOT, Energy for the particular source or fluorescence data
-	map<int, double> m_calibPoints;
+	map<int, double> m_calibPoints; // key: peak number in the source's histogram, value: energy of the peak (as defined in CalibHandler constructor) 
 	map<int, int> m_calibPointsRegion;
 	string m_sourceName;
 
@@ -110,11 +110,11 @@ public :
 
 	//TTree * m_tree;
 
-	TOTCalib();
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int);
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *, int);
+	TOTCalib();   
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method = __standard);
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *, int method = __standard);
 
-	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int);
+	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method = __standard);
 
 	virtual ~TOTCalib();
 	virtual Int_t    Cut(Long64_t entry);
@@ -172,6 +172,7 @@ public :
     // Methods for calibration
     enum {
         __standard = 0,
+        __lowStats,        
         __jakubek // Method proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
     };
 
@@ -180,7 +181,7 @@ public :
 	void ReorderSources();
 
 	int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *);
-    int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *, int);    
+    int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *, double);    
 	TF1 * FittingFunctionSelector(double, TOTCalib *, int);
 	void GetLinearFit(double & a, double & b, vector< pair<double,double> > p);
 	void RandomFitParameters(TF1 * f, TH1 * h, int tot, TOTCalib *);
@@ -214,11 +215,6 @@ public :
 		__VER_DEBUG,
 		__VER_INFO,
 		__VER_QUIET
-	};
-
-	enum { //calibration method
-		__standard = 0,
-		__lowStats
 	};
 
 	double GetKernelBandWidth(){ return m_bandwidth; };
