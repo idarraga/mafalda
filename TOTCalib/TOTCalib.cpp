@@ -366,8 +366,8 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 
 
 	if( TString(f->GetName()).Contains("gf_lowe") ) {
-		minf = tot - 3*loc_bandwidth;
-		maxf = tot + loc_bandwidth;
+		minf = 1;
+		maxf = tot + loc_bandwidth*3;
 	}
 	if(minf < 1) minf = 1; // correct for negative or zero minf value
 
@@ -511,9 +511,19 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 }
 
 int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h, store * sto, double energy) {
+	
+	double loc_bandwidth = source->GetKernelBandWidth();
+    double minf;
+	double maxf;
+	
+	if (source->GetCalibMethod() == __lowStats){ // optimized fit interval
+		minf = tot - 2*loc_bandwidth;
+		maxf = tot + 2*loc_bandwidth;
 
-	double minf = tot - m_bandwidth;
-	double maxf = tot + m_bandwidth;
+	} else { // standard fit interval
+	
+	double minf = tot - loc_bandwidth;
+	double maxf = tot + loc_bandwidth;
 
 	int centerBin = h->FindBin(tot);
 	double heightAtKernelHint = h->GetBinContent(centerBin);
@@ -547,11 +557,11 @@ int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h,
 	minf = h->GetBinCenter(leftBin);
 
 	//int width = rightBin - centerBin;
-
+    }
 
 	if( TString(f->GetName()).Contains("gf_lowe") ) {
 		minf = 1;
-		maxf = tot + m_bandwidth*3;
+		maxf = tot + loc_bandwidth*3;
 	}
 	if(minf < 1) minf = 1; // correct for negative or zero minf value
 
