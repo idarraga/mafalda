@@ -309,7 +309,7 @@ vector<double> TOTCalib::LowStatsPeakSelection( vector<double> peaks,unsigned in
 	return selected_p;
 }
 
-int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, store * sto) {
+int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, store * sto, double energy) {
 
 	// This was a suggestion but didn't quite work correctly.
 	// Use a,b from previous fits in the linear region.
@@ -401,6 +401,17 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 	int indexmax = 0; // Index of best fit
 	bool continueFitting = true;
 
+    Double_t a = 0.;
+    Double_t b = 0.; 
+    
+    if ( sto->linearpairs.size() >= 2 ) {
+        GetLinearFit(a,b,sto->linearpairs);
+        
+        if( m_verbose != __VER_QUIET ) {
+            cout<< "Got a and b coefficients from previous gaussian fits: a="<<a<<" and b="<<b<<endl;
+        }
+    }
+
 	//while ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) {
 	while ( continueFitting ) {
 
@@ -408,9 +419,18 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 
         // keep track of the parameters to choose the better set in case the fit is not good enough
 
+        if ( TString(f->GetName()).Contains("gf_lowe") && a!=0. && b!=0.){
+           f->FixParameter(1,energy);
+           f->FixParameter(3,a);
+           f->FixParameter(4,b);
+        } else if ( TString(f->GetName()).Contains("gf_lowe")){
+           f->FixParameter(1,energy); 
+        }
+
 		fittries = 0; // rewind
 		status = -1;
 		while ( status != 0 && fittries < __max_fit_tries ) {
+		
 			if (src->GetCalibMethod() == __lowStats){
 				f->FixParameter(1,tot); // fix mean of the gaussian (otherwise incorrect fit in most cases)
 				f->SetParLimits(2,0, 1.5*loc_bandwidth); // set a max value for sigma (otherwise incorrect in most cases)
@@ -510,188 +530,8 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 	return status;
 }
 
-int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h, store * sto, double energy) {
-	
-	double loc_bandwidth = source->GetKernelBandWidth();
-    double minf;
-	double maxf;
-	
-	if (source->GetCalibMethod() == __lowStats){ // optimized fit interval
-		minf = tot - 2*loc_bandwidth;
-		maxf = tot + 2*loc_bandwidth;
 
-	} else { // standard fit interval
-	
-	double minf = tot - loc_bandwidth;
-	double maxf = tot + loc_bandwidth;
 
-	int centerBin = h->FindBin(tot);
-	double heightAtKernelHint = h->GetBinContent(centerBin);
-
-	unsigned int nBins = h->GetXaxis()->GetNbins();
-	unsigned int rightBin = h->FindBin( maxf );
-	unsigned int leftBin = h->FindBin( minf );
-
-	int underThresholdCntr = 0;
-	for(unsigned int i=centerBin; i<=nBins; ++i ) {
-		if( h->GetBinContent(i) < heightAtKernelHint * __fraction_of_height_range_id ) {
-			underThresholdCntr++;
-			rightBin = i;
-			if(underThresholdCntr > 1) break;
-		}
-	}
-	underThresholdCntr = 0;
-	for(unsigned int i=centerBin; i>1; --i ) {
-		if( h->GetBinContent(i) < heightAtKernelHint * __fraction_of_height_range_id ) {
-			underThresholdCntr++;
-			leftBin = i;
-			if(underThresholdCntr > 1) break;
-		}
-	}
-	// take one more
-	if(rightBin < nBins) rightBin++;
-	if(leftBin > 1) leftBin--;
-
-	// define maxf and minf
-	maxf = h->GetBinCenter(rightBin);
-	minf = h->GetBinCenter(leftBin);
-
-	//int width = rightBin - centerBin;
-    }
-
-	if( TString(f->GetName()).Contains("gf_lowe") ) {
-		minf = 1;
-		maxf = tot + loc_bandwidth*3;
-	}
-	if(minf < 1) minf = 1; // correct for negative or zero minf value
-
-	TString fitconfig = "NQS";
-	if(m_verbose == __VER_DEBUG_LOOP) fitconfig = "NS";
-
-	// "N"  Do not store the graphics function, do not draw
-	// "R"  Use the Range specified in the function range
-	// "M"  More. Improve fit results.
-	// "S"  The result of the fit is returned in the TFitResultPtr
-	// "Q"  Quiet
-
-	if( (m_verbose >= __VER_INFO) && (m_verbose != __VER_QUIET) ) {
-		cout << "[FIT] Fit in the interval : " << minf << ", " << maxf << " with options : " << fitconfig<<endl;
-	}
-
-	int status = -1, fittries = 0;
-	double sprob = 0.;
-	int fit_max_rand_tries = 0;
-
-	// Save all the tries and if the limit __fit_pars_randomization_max is reached just pick up the best
-	map<int, vector<double> > calibTriesMap;
-	map<int, vector<double> > calibTriesErrMap;
-	vector<double> calibTriesProb;
-	vector<int> calibTriesStatus;
-	int indexmax = 0; // Index of best fit
-	bool continueFitting = true;
-
-    Double_t a = 0.;
-    Double_t b = 0.; 
-    
-    if ( sto->linearpairs.size() >= 2 ) {
-        GetLinearFit(a,b,sto->linearpairs);
-        
-        if( m_verbose != __VER_QUIET ) {
-            cout<< "Got a and b coefficients from previous gaussian fits: a="<<a<<" and b="<<b<<endl;
-        }
-    }
-    
-	//while ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) {
-	while ( continueFitting ) {
-
-		RandomFitParameters( f, h, tot, source);
-		// keep track of the parameters to choose the better set in case the fit is not good enough
-
-        if ( TString(f->GetName()).Contains("gf_lowe") && a!=0. && b!=0.){
-           f->FixParameter(1,energy);
-           f->FixParameter(3,a);
-           f->FixParameter(4,b);
-        } else if ( TString(f->GetName()).Contains("gf_lowe")){
-           f->FixParameter(1,energy); 
-        }
-        
-		fittries = 0; // rewind
-		status = -1;
-		while ( status != 0 && fittries < __max_fit_tries ) {
-
-			TFitResultPtr fitr = h->Fit(f, fitconfig.Data(), "" , minf, maxf);
-			status = int ( fitr );
-			// special case where something very bad happens like trying to fit with empty data
-			if( status == -1 ) break;
-
-			// Get the stat prob of the fit
-			sprob = TMath::Prob( fitr.Get()->Chi2() / fitr.Get()->Ndf() , fitr.Get()->Ndf() );
-
-			fittries++;
-		}
-
-		// special case where something very bad happens like trying to fit with empty data
-		if( status == -1 ) break;
-
-		if(m_verbose == __VER_DEBUG_LOOP) cout << "Try " << fit_max_rand_tries << " { status : " << status << " } [PROB] = " << sprob << " " << endl;
-
-		// Save the results of this fit
-		calibTriesMap[fit_max_rand_tries] = vector<double>(f->GetNpar(), 0.); // Save as many parameters as the fit has.  It does change.
-		calibTriesErrMap[fit_max_rand_tries] = vector<double>(f->GetNpar(), 0.);
-		calibTriesProb.push_back( sprob );
-		calibTriesStatus.push_back( status );
-		// Recover the resulting fit parameters
-		for(int i = 0 ; i < f->GetNpar() ; i++) {
-			calibTriesMap[fit_max_rand_tries][i] = f->GetParameter(i);
-			calibTriesErrMap[fit_max_rand_tries][i] = f->GetParError(i);
-		}
-
-		fit_max_rand_tries++;
-
-		// Decide wether we try another fit of not
-		if ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) { // keep trying if the minimum has not been reached up to a maximum number of tries
-			continueFitting = true;
-		} else if ( sprob > __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_min) { // even if the minimum was found try a minimum number of times
-			continueFitting = true;
-		} else { // otherwise stop
-			continueFitting = false;
-		}
-	}
-
-	// Search the max
-	vector<double>::iterator iB = calibTriesProb.begin();
-	vector<double>::iterator iE = calibTriesProb.end();
-	vector<double>::iterator imax = max_element( iB, iE );
-
-	// See what the index is
-	vector<double>::iterator i = iB;
-	for( ; i != iE ; i++) {
-		if( i == imax ) break;
-		indexmax++;
-	}
-
-	// Print out the best fit values
-	if(m_verbose == __VER_DEBUG) {
-		cout << "[MAX] Fit = " << f->GetName() << " | best fit index = " << indexmax << " | prob = "
-				<< calibTriesProb[indexmax] << " | status : " << calibTriesStatus[indexmax] << " | pars : ";
-		for(int j = 0 ; j < f->GetNpar() ; j++) {
-			cout << f->GetParName(j) << " = " << calibTriesMap[indexmax][j] << "+/-" << calibTriesErrMap[indexmax][j];
-			if( j < f->GetNpar() - 1 ) cout << ", ";
-		}
-		cout << endl;
-	}
-
-	// Change the fit parameters in the fitting function to the best found.
-	// The parameters are return to the calling function using the TF1 pointer.
-	for ( int j = 0 ; j < f->GetNpar() ; j++ ) {
-		f->SetParameter( j, calibTriesMap[indexmax][j] );
-	}
-
-	// save the status
-	sto->peakFitStatus.push_back( calibTriesStatus[indexmax] );
-
-	return status;
-}
 
 void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr) {
 
