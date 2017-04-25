@@ -235,18 +235,18 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
         f->SetParameter(0, m_rand1->Rndm()*50. + 10 );
         // p1 is fixed in PeakFit()
         // p2 is the sigma --> (0, 10)
-        f->SetParameter(2, m_rand1->Rndm()*10.);
+        f->SetParameter(2, m_rand1->Rndm()*20.);
         // p3 is a. Random --> (2, 4)
-        f->SetParameter(3, m_rand1->Rndm()*2. + 2);
+        //f->SetParameter(3, m_rand1->Rndm()*2. + 2);
         // p4 is b. Random --> (20, 100)
-        f->SetParameter(4, m_rand1->Rndm()*80. + 20.);
+        //f->SetParameter(4, m_rand1->Rndm()*80. + 20.);
         // p5 is c. Random --> (-50, 350)
-        f->SetParameter(5, m_rand1->Rndm()*400. - 50);
-        f->SetParameter(5, 58.);
-        
+        //f->SetParameter(5, m_rand1->Rndm()*400. - 50);        
+        f->SetParameter(5,175.);
         // p6 is t. Random --> (1, 6)
-        f->SetParameter(6, m_rand1->Rndm()*5.+1);
-        f->SetParameter(6, -1.5);
+        //f->SetParameter(6, m_rand1->Rndm()*5.+1);
+        //f->SetParameter(6, -1.5);
+        f->SetParameter(6,-0.1);
         
         //cout<<f->GetParameter(0)<<" "<<f->GetParameter(1)<<" "<<f->GetParameter(2)<<" "<<f->GetParameter(3)<<" "<<f->GetParameter(4)<<" "<<f->GetParameter(5)<<" "<<f->GetParameter(6)<<endl;
         
@@ -1055,7 +1055,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 			vector<TOTCalib *>::iterator i;
             
             //if(m_verbose != __VER_QUIET) {            
-                cout<<endl<< "********** Processing pixel : "<<pix<<" ********** "<<endl;
+                cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
             //}
             
 			for (i = m_allSources.begin() ; i != m_allSources.end() ; i++ ) {
@@ -2491,12 +2491,12 @@ TGraphErrors * TOTCalib::GetCalibGraph(int pix){
 	vector<double>::iterator ie = err.begin();
 
 	int cntr = 0;
-	for( ; i != points.end() ; i++) {
-
+	for( ; i != points.end() ; i++,ie++) {
+        
+        //cout<<(*i).first<<" "<<(*i).second<<" "<<*ie<<endl;
 		if( (*i).first > 0){
 			g->SetPoint(cntr, (*i).first, (*i).second );
 			g->SetPointError(cntr, 0.,  *ie );
-			ie++;
 			cntr++;
 
 		}
