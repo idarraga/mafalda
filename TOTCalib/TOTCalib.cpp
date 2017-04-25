@@ -169,12 +169,12 @@ void TOTCalib::GetLinearFit(double & a, double & b, vector<pair<double,double> >
 
 	int N = (int) p.size();
 	TGraph * g = new TGraph(N);
-	if(m_verbose == __VER_DEBUG || m_verbose == __VER_INFO) cout << "Linear fit using : ";
+	if(m_verbose == __VER_DEBUG) cout << "Linear fit using : ";
 	for( int i = 0 ; i < N ; i++ ) {
 		g->SetPoint( i, p[i].first, p[i].second );
-		if(m_verbose == __VER_DEBUG || m_verbose == __VER_INFO) cout << "(" << p[i].first << ", " <<  p[i].second << ") ";
+		if(m_verbose == __VER_DEBUG) cout << "(" << p[i].first << ", " <<  p[i].second << ") ";
 	}
-	cout << endl;
+	if(m_verbose == __VER_DEBUG) cout << endl;
 
 	TF1 * f = new TF1("lin_temp_surr", "[0]*x + [1]", 0, 100000);
 	f->SetParameters(1., 1.);
@@ -219,10 +219,7 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
 
 	//double * pars = new double (__npars_lowe_fitfunc);
 	double loc_bandwidth = s->GetKernelBandWidth();
-	if(m_verbose == __VER_DEBUG_LOOP) { cout << "[RAND] Producing a set of random fit parameters." << endl; }
-
-    double local_bandwidth = s->GetKernelBandWidth(); 
-    
+	if(m_verbose == __VER_DEBUG_LOOP) { cout << "[RAND] Producing a set of random fit parameters." << endl; }    
     
 	if ( TString(f->GetName()).Contains("gf_lowe") ) { // FIXME: this case is Ad hoc
 
@@ -233,20 +230,17 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
         // p0 is the amplitude and can always be taken from the histogram
         // For now --> (10, 60)
         f->SetParameter(0, m_rand1->Rndm()*50. + 10 );
-        // p1 is fixed in PeakFit()
+        // p1 is the mean --> fixed in PeakFit()
         // p2 is the sigma --> (0, 10)
         f->SetParameter(2, m_rand1->Rndm()*20.);
         // p3 is a. Random --> (2, 4)
-        //f->SetParameter(3, m_rand1->Rndm()*2. + 2);
+        f->SetParameter(3, m_rand1->Rndm()*2. + 2);
         // p4 is b. Random --> (20, 100)
-        //f->SetParameter(4, m_rand1->Rndm()*80. + 20.);
+        f->SetParameter(4, m_rand1->Rndm()*80. + 20.);
         // p5 is c. Random --> (-50, 350)
-        //f->SetParameter(5, m_rand1->Rndm()*400. - 50);        
-        f->SetParameter(5,175.);
+        f->SetParameter(5,180.);//175.
         // p6 is t. Random --> (1, 6)
-        //f->SetParameter(6, m_rand1->Rndm()*5.+1);
-        //f->SetParameter(6, -1.5);
-        f->SetParameter(6,-0.1);
+        f->SetParameter(6,0.);
         
         //cout<<f->GetParameter(0)<<" "<<f->GetParameter(1)<<" "<<f->GetParameter(2)<<" "<<f->GetParameter(3)<<" "<<f->GetParameter(4)<<" "<<f->GetParameter(5)<<" "<<f->GetParameter(6)<<endl;
         
@@ -386,7 +380,7 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 	// "S"  The result of the fit is returned in the TFitResultPtr
 	// "Q"  Quiet
 
-	if(m_verbose >= __VER_INFO) {
+	if( (m_verbose >= __VER_INFO) && (m_verbose != __VER_QUIET) ) {
 		cout << "[FIT] Fit in the interval : " << minf << ", " << maxf << " with options : " << fitconfig << endl;
 	}
 
@@ -570,7 +564,7 @@ int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h,
 	// "S"  The result of the fit is returned in the TFitResultPtr
 	// "Q"  Quiet
 
-	if(m_verbose >= __VER_INFO) {
+	if( (m_verbose >= __VER_INFO) && (m_verbose != __VER_QUIET) ) {
 		cout << "[FIT] Fit in the interval : " << minf << ", " << maxf << " with options : " << fitconfig<<endl;
 	}
 
@@ -591,7 +585,10 @@ int TOTCalib::PeakFit(TOTCalib * source, int /*pix*/, int tot, TF1 * f, TH1 * h,
     
     if ( sto->linearpairs.size() >= 2 ) {
         GetLinearFit(a,b,sto->linearpairs);
-        cout<< "Got a and b coefficients from previous gaussian fits: a="<<a<<" and b="<<b<<endl;
+        
+        if( m_verbose != __VER_QUIET ) {
+            cout<< "Got a and b coefficients from previous gaussian fits: a="<<a<<" and b="<<b<<endl;
+        }
     }
     
 	//while ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) {
@@ -1054,9 +1051,11 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 			// Process source in the defined order
 			vector<TOTCalib *>::iterator i;
             
-            //if(m_verbose != __VER_QUIET) {            
+            if(m_verbose != __VER_QUIET) {            
                 cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
-            //}
+            }else{
+                if (pix % 1000 == 0) cout<<endl<<"Processing pixel : "<<pix<<endl;
+            }          
             
 			for (i = m_allSources.begin() ; i != m_allSources.end() ; i++ ) {
 
@@ -1241,8 +1240,10 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                 calibProperties.push_back( 0.0 );
                 calibTriesProb.push_back( 0. );
                 
-                cout << " | a, b, c, t : "<< a << ", "<< b << ", "<< c << ", "<< t << ", "<<endl;
-
+                if (m_verbose !=__VER_QUIET) {
+                    cout<<"------- Calibration results -------"<<endl;
+                    cout << "a, b, c, t : "<< a << ", "<< b << ", "<< c << ", "<< t << ", "<<endl;
+                }
             }           
 
 			// delete the function and TGraph
@@ -1509,9 +1510,6 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 	vector<double> peaks = s_tot[pix];
 
     string source_name = s->GetCalibHandler()->GetSourcename();
-    //if ( m_verbose != __VER_QUIET ){ 
-        cout<<endl<<"------- Source: "<<source_name<<" -------"<<endl<<"N peaks found = " << peaks.size() << endl;
-    //}
     
 	double loc_bandwidth = s->GetKernelBandWidth(); 
 
@@ -1524,7 +1522,10 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 	// These are the calib points expected per source
 	map<int, double> calibPoints = s->GetCalibHandler()->GetCalibPoints();
 
-	cout << " | Calib points = " << calibPoints.size() << endl;
+    if ( m_verbose != __VER_QUIET ){ 
+        cout<<"------- Source: "<<source_name<<" -------"<<endl;
+        cout<<"N peaks found = " << peaks.size() << " | Expected peaks = " << calibPoints.size() << endl;
+    }
 
 	// If this situation is present determine which peaks to remove
 	// remove as many as necesary
@@ -1535,15 +1536,21 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 		int npeaks = (int)peaks.size();
 		for ( int i = 0 ; i < (int)peaks.size() ; i++ ) {
 			integ.push_back( th->Integral( th->FindBin( peaks[i] - loc_bandwidth ), th->FindBin( peaks[i]+loc_bandwidth ) ) );
-			cout << th->GetName() << " thl=" << peaks[i] << " [" << i << "]=" << integ[i] << " | ";
+			if (m_verbose != __VER_QUIET){ 
+                cout << th->GetName() << " thl=" << peaks[i] << " [" << i << "]=" << integ[i] << " | ";
+            }
 		}
 		// If the last peak has low weight (data close to it, integral) then remove the last one
 		if ( integ[npeaks-1] < 0.1*integ[0] ) { // it the last is less than 10% the first integral
-			cout << " | last item removed ";
+            if (m_verbose != __VER_QUIET){ 
+                cout << " | last item removed ";
+			}
 			peaks.pop_back();
 		} else {
 			// Otherwise remove the first one
-			cout << " | first item removed ";
+            if (m_verbose != __VER_QUIET){ 
+                cout << " | first item removed ";
+			}
 			peaks.erase( peaks.begin() );
 		}
 
@@ -2093,9 +2100,8 @@ void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int 
             cout << v1(i) << " " ;
         }
         cout << " | clock = " << v1(v1.GetNoElements() - 1) << " MHz \n";
-    }else{
-        cout << "[WARNING] Can't verify DACs !!!  Running at your own risk !!!" << endl;
     }
+    
 
 	Init(tree);
 
@@ -2396,10 +2402,6 @@ void TOTCalib::DrawFullPixelCalib(int pix) {
 
             }
 			cout << " ]" << endl;
-
-            if(TString(gf->GetName()).Contains("gf_lowe") && m_verbose >= __VER_INFO) {
-                cout << "Fit function max: "<<gf->GetMaximumX()<<endl;
-            }
             
 			gf_clone->SetLineColor(kRed);
 			gf_clone->Draw("same");                     // The drawing is not really happening in this scope.  That's why we need clones
@@ -2511,7 +2513,6 @@ TGraphErrors * TOTCalib::GetCalibGraph(int pix){
 CalibHandler::CalibHandler (string source) {
 
 	m_sourceName = source;
-	cout << endl;
 	cout << "Source is " << m_sourceName;
 
 	if( ! TString(source).CompareTo( "Am241", TString::kIgnoreCase )
@@ -2602,7 +2603,7 @@ CalibHandler::CalibHandler (string source) {
 
 		// Fluorescence  8.05 keV
 		m_calibPoints[0] = 8.05; //
-		m_calibPointsRegion[0] = __linear_reg;
+		m_calibPointsRegion[0] = __lowenergy_reg;
 
 	} else if ( ! TString(source).CompareTo( "Am241CutLow_Plus_SnFluo", TString::kIgnoreCase )
 			||
