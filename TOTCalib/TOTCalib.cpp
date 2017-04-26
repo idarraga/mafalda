@@ -168,32 +168,36 @@ void TOTCalib::FillHisto(int x, int tot) {
 void TOTCalib::GetLinearFit(double & a, double & b, vector<pair<double,double> > p){
 
 	int N = (int) p.size();
-	TGraph * g = new TGraph(N);
-	if(m_verbose == __VER_DEBUG) cout << "Linear fit using : ";
-	for( int i = 0 ; i < N ; i++ ) {
-		g->SetPoint( i, p[i].first, p[i].second );
-		if(m_verbose == __VER_DEBUG) cout << "(" << p[i].first << ", " <<  p[i].second << ") ";
+	
+	if (N != 0){
+        
+        TGraph * g = new TGraph(N);
+        if(m_verbose == __VER_DEBUG) cout << "Linear fit using : ";
+        for( int i = 0 ; i < N ; i++ ) {
+            g->SetPoint( i, p[i].first, p[i].second );
+            if(m_verbose == __VER_DEBUG) cout << "(" << p[i].first << ", " <<  p[i].second << ") ";
+        }
+        if(m_verbose == __VER_DEBUG) cout << endl;
+    
+        TF1 * f = new TF1("lin_temp_surr", "[0]*x + [1]", 0, 100000);
+        f->SetParameters(1., 1.);
+        // "N"  Do not store the graphics function, do not draw
+        // "R"  Use the Range specified in the function range
+        // "M"  More. Improve fit results.
+        // "S"  The result of the fit is returned in the TFitResultPtr
+        // "Q"  Quiet
+        TString fitconfig = "RNQS";
+        if(m_verbose == __VER_DEBUG) fitconfig = "RNS";
+        g->Fit(f, fitconfig.Data(), "");
+    
+        // Return values
+        a = f->GetParameter(0);
+        b = f->GetParameter(1);
+    
+        // delete the objects
+        delete f;
+        delete g;
 	}
-	if(m_verbose == __VER_DEBUG) cout << endl;
-
-	TF1 * f = new TF1("lin_temp_surr", "[0]*x + [1]", 0, 100000);
-	f->SetParameters(1., 1.);
-	// "N"  Do not store the graphics function, do not draw
-	// "R"  Use the Range specified in the function range
-	// "M"  More. Improve fit results.
-	// "S"  The result of the fit is returned in the TFitResultPtr
-	// "Q"  Quiet
-	TString fitconfig = "RNQS";
-	if(m_verbose == __VER_DEBUG) fitconfig = "RNS";
-	g->Fit(f, fitconfig.Data(), "");
-
-	// Return values
-	a = f->GetParameter(0);
-	b = f->GetParameter(1);
-
-	// delete the objects
-	delete f;
-	delete g;
 
 }
 
@@ -228,17 +232,17 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
 		//m_rand1->RndmArray(__npars_lowe_fitfunc, pars);
 
         // p0 is the amplitude and can always be taken from the histogram
-        // For now --> (10, 60)
-        f->SetParameter(0, m_rand1->Rndm()*50. + 10 );
+        // For now --> (20, 50)
+        f->SetParameter(0, m_rand1->Rndm()*30. + 20. );
         // p1 is the mean --> fixed in PeakFit()
-        // p2 is the sigma --> (0, 10)
-        f->SetParameter(2, m_rand1->Rndm()*20.);
+        // p2 is the sigma 
+        f->SetParameter(2, 2.);
         // p3 is a. Random --> (2, 4)
-        f->SetParameter(3, m_rand1->Rndm()*2. + 2);
+        f->SetParameter(3, m_rand1->Rndm()*2. + 2.);
         // p4 is b. Random --> (20, 100)
         f->SetParameter(4, m_rand1->Rndm()*80. + 20.);
         // p5 is c. Random --> (-50, 350)
-        f->SetParameter(5,180.);//175.
+        f->SetParameter(5, m_rand1->Rndm()*100. + 150.);//175.
         // p6 is t. Random --> (1, 6)
         f->SetParameter(6,0.);
         
@@ -419,12 +423,14 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 
         // keep track of the parameters to choose the better set in case the fit is not good enough
 
-        if ( TString(f->GetName()).Contains("gf_lowe") && a!=0. && b!=0.){
-           f->FixParameter(1,energy);
-           f->FixParameter(3,a);
-           f->FixParameter(4,b);
-        } else if ( TString(f->GetName()).Contains("gf_lowe")){
-           f->FixParameter(1,energy); 
+        if ( TString(f->GetName()).Contains("gf_lowe") ){
+           if (a!=0. && b!=0.){
+               f->FixParameter(1,energy);
+               f->FixParameter(3,a);
+               f->FixParameter(4,b);
+           }else {
+               f->FixParameter(1,energy); 
+           }
         }
 
 		fittries = 0; // rewind
