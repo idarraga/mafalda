@@ -1072,33 +1072,45 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
     
                 }
                                 
-            } else if (calibMethod == __jakubek){
+            } else if (calibMethod == __jakubek){  // In this case no fit with surrogate is needed
+              
+                int size = st->pointsSave_ic.size();
                 
-                // In this case no fit with surrogate is needed
-                calibConst.push_back( a );
-                calibConst.push_back( b );
-                
-                // For c and t, look for the results obtained from low energy fits                
-                double c = 0.;
-                double t = 0.;
-                vector< double >::iterator st_itr;
-                int counter = 0;
-                int position = 0;
-                for(st_itr = st->pointsSave_ic.begin() ; st_itr != st->pointsSave_ic.end() ; st_itr++ ) {
+                if ( size != 0 ){
+                    calibConst.push_back( a );
+                    calibConst.push_back( b );
                     
-                    if ((*st_itr)!=0.){c = *st_itr; position = counter;}
-                    counter ++;
-                }
-                t = st->pointsSave_it.at(position);
-                calibConst.push_back( c );
-                calibConst.push_back( t );
+                    // For c and t, look for the results obtained from low energy fits                
+                    double c = 0.;
+                    double t = 0.;
+                    vector< double >::iterator st_itr;
+                    int counter = 0;
+                    int position = 0;
+                    for(st_itr = st->pointsSave_ic.begin() ; st_itr != st->pointsSave_ic.end() ; st_itr++ ) {
+                        
+                        if ((*st_itr)!=0.){c = *st_itr; position = counter;}
+                        counter ++;
+                    }
+                    t = st->pointsSave_it.at(position);
+                    calibConst.push_back( c );
+                    calibConst.push_back( t );
+    
+                    calibProperties.push_back( 0.0 );
+                    calibTriesProb.push_back( 0. );
+                    
+                    if (m_verbose !=__VER_QUIET) {
+                        cout<<"------- Calibration results -------"<<endl;
+                        cout << "a, b, c, t : "<< a << ", "<< b << ", "<< c << ", "<< t << ", "<<endl;
+                    }
+                    
+                } else{
+                	calibConst.push_back( 0.0 );
+                    calibConst.push_back( 0.0 );
+                    calibConst.push_back( 0.0 );
+                    calibConst.push_back( 0.0 );
+                	calibProperties.push_back( 0.0 );
+                	calibTriesProb.push_back( 0. );
 
-                calibProperties.push_back( 0.0 );
-                calibTriesProb.push_back( 0. );
-                
-                if (m_verbose !=__VER_QUIET) {
-                    cout<<"------- Calibration results -------"<<endl;
-                    cout << "a, b, c, t : "<< a << ", "<< b << ", "<< c << ", "<< t << ", "<<endl;
                 }
             }           
 
@@ -1120,9 +1132,10 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 
 		}
 
-		// Delete TGraph
+		// Delete TGraph and store object
 		if(g) delete g;
-
+        if(st) delete st;
+        
 		// Fill the calib constants and properties
 		m_calibSurrogateConstants[pix]  = calibConst;
 		// Properties

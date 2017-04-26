@@ -39,7 +39,7 @@ using namespace std;
 #define __npars_surrogate			    4
 #define __npars_lowe_fitfunc            7
 #define __min_tmathprobtest_val      0.90
-#define __max_fit_tries                1000
+#define __max_fit_tries                100
 #define __fit_pars_randomization_max 1000
 #define __fit_pars_randomization_min   20
 
@@ -110,6 +110,13 @@ public :
 
 	//TTree * m_tree;
 
+    // Methods for calibration
+    enum {
+        __standard = 0,
+        __lowStats,        
+        __jakubek // Method proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+    };
+
 	TOTCalib();   
 	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method = __standard);
 	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *, int method = __standard);
@@ -168,13 +175,6 @@ public :
 	void Blender(TOTCalib * , TOTCalib *, TString, int = 0);
 	void Blender(TOTCalib * s2, TString outputName, int = 0);
 	void Blender(TString, int = 0);
-    
-    // Methods for calibration
-    enum {
-        __standard = 0,
-        __lowStats,        
-        __jakubek // Method proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
-    };
 
 	void ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
 	void ProcessOneSourceLowStats(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
