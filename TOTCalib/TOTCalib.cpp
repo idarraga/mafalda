@@ -408,12 +408,18 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
     Double_t a = 0.;
     Double_t b = 0.; 
     
-    if ( sto->linearpairs.size() >= 2 ) {
-        GetLinearFit(a,b,sto->linearpairs);
-        
-        if( m_verbose != __VER_QUIET ) {
-            cout<< "Got a and b coefficients from previous gaussian fits: a="<<a<<" and b="<<b<<endl;
+    if (TString(f->GetName()).Contains("gf_lowe")) {
+        if (sto->linearpairs.size() >= 2){
+            GetLinearFit(a,b,sto->linearpairs);        
+            if( m_verbose != __VER_QUIET ) {
+                cout<< "[FIT] Using a and b coeff from linear region: a="<<a<<" and b="<<b<<endl;
+            }
+        }else{
+            if( m_verbose != __VER_QUIET ) {
+                cout<< "[FIT] Warning: trying to fit lowen func without a and b parameters fixed"<<endl;
+            }
         }
+
     }
 
 	//while ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) {
@@ -594,14 +600,19 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 		constantfit = gf->GetParameter(0);
 		totmeanfit = gf->GetParameter(1);
 		sigmafit = TMath::Abs ( gf->GetParameter(2) );
-        if ( TString(gf->GetName()).Contains("gf_lowe") ) {
-            g->SetPoint(cntr, (*i).first, func_TOTatMax ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
-            g->SetPointError(cntr, 0., sigmafit );
-        }else{
-            g->SetPoint(cntr, (*i).first, totmeanfit ); // E, TOT (from the fit in this context)
-            g->SetPointError(cntr, 0., sigmafit );
+        
+        if ( (*EpointItr).second > 0. ){ // only fill graph if positive energy (the graph is used for surrogate fit in Blender)
+            
+            if ( TString(gf->GetName()).Contains("gf_lowe") ) {
+                g->SetPoint(cntr, (*i).first, func_TOTatMax ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
+                g->SetPointError(cntr, 0., sigmafit );
+            }else{
+                g->SetPoint(cntr, (*i).first, totmeanfit ); // E, TOT (from the fit in this context)
+                g->SetPointError(cntr, 0., sigmafit );
+            }
+            cntr++; 
         }
-		cntr++;
+
 
 		sto->pointsSaveSigmas.push_back( sigmafit );                       // The sigma of the fit
 		sto->pointsSaveConstants.push_back( constantfit );                 // The constant of the fit
@@ -655,24 +666,33 @@ void TOTCalib::ReorderSources() {
 	vector<TOTCalib *>::iterator i = m_allSources.begin();
 	map<int, int>::iterator reg_i;
 	int nlinear = 0;
+    int nlowenergy = 0;
+    int nSources = m_allSources.size();
 
-	// Index of the source that must be processed first
+	// Indexes of sources that must be processed first and last
 	int firstIndex = 0;
+	int lastIndex = 0;
 
 	int index = 0;
 	for( ; i != m_allSources.end() ; i++ ) {
 
 		nlinear = 0; // rewind
+        nlowenergy = 0; // rewind        
 
 		map<int, int> reg = (*i)->GetCalibHandler()->GetCalibPointsRegion();
 		reg_i = reg.begin();
 		for ( ; reg_i != reg.end() ; reg_i++ ) {
 			if( (*reg_i).second == CalibHandler::__linear_reg ) nlinear++;
+            if( (*reg_i).second == CalibHandler::__lowenergy_reg ) nlowenergy++;
 		}
 
 		if ( nlinear >= 2 ) {    // this can be the first source
 			firstIndex = index;
 		}
+        
+        if ( nlowenergy >= 1 ) {    // this must be at the end
+			lastIndex = index;
+		}       
 
 		index++;
 	}
@@ -681,6 +701,11 @@ void TOTCalib::ReorderSources() {
 	TOTCalib * temp_Ptr = m_allSources[0];
 	m_allSources[0] = m_allSources[firstIndex];
 	m_allSources[firstIndex] = temp_Ptr;
+    
+    // Switch positions with the pointer that should be processed last
+	TOTCalib * temp_Ptr2 = m_allSources[nSources-1];
+	m_allSources[nSources-1] = m_allSources[lastIndex];
+	m_allSources[lastIndex] = temp_Ptr2;
 
 	// Report order
 	cout << "Processing sources in the following order : ";
@@ -689,8 +714,7 @@ void TOTCalib::ReorderSources() {
 		if( i+1 !=  m_allSources.end() ) cout << ", ";
 	}
 	cout << endl;
-
-    cout<<endl<<"-----------------------------------------------------------"<<endl;    
+    cout<<"-----------------------------------------------------------"<<endl;    
 }
 
 void TOTCalib::CreateGlobalKernelAndGetCriticalPoints(){ 
@@ -787,9 +811,26 @@ void TOTCalib::CreateGlobalKernelAndGetCriticalPoints(){
 	}
 }
 
+void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TOTCalib * s4, TOTCalib * s5, TString outputName, int calibMethod) {
+
+    cout<<endl<<"-----------------------------------------------------------"<<endl;    
+	cout << "Blender ... making all the fits" << endl;
+
+	// The first source to be processed needs to be the source where two,
+	// or more points defining the linear region are to be found
+	m_allSources.push_back( this );
+	m_allSources.push_back( s2 );
+	m_allSources.push_back( s3 );
+	m_allSources.push_back( s4 );
+    m_allSources.push_back( s5 );
+
+	Blender( outputName, calibMethod );
+}
+
 void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TOTCalib * s4, TString outputName, int calibMethod) {
 
-	cout << endl << "Blender ... making all the fits" << endl;
+    cout<<endl<<"-----------------------------------------------------------"<<endl;    
+	cout << "Blender ... making all the fits" << endl;
 
 	// The first source to be processed needs to be the source where two,
 	// or more points defining the linear region are to be found
@@ -803,7 +844,8 @@ void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TOTCalib * s4, TString out
 
 void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TString outputName, int calibMethod) {
 
-	cout << endl << "Blender ... making all the fits" << endl;
+    cout<<endl<<"-----------------------------------------------------------"<<endl;    
+	cout << "Blender ... making all the fits" << endl;
 
 	// The first source to be processed needs to be the source where two,
 	// or more points defining the linear region are to be found
@@ -815,8 +857,9 @@ void TOTCalib::Blender (TOTCalib * s2, TOTCalib * s3, TString outputName, int ca
 }
 
 void TOTCalib::Blender (TOTCalib * s2, TString outputName, int calibMethod) {
-
-	cout << endl << "Blender ... making all the fits" << endl;
+    
+    cout<<endl<<"-----------------------------------------------------------"<<endl;    
+	cout << "Blender ... making all the fits" << endl;
 
 	// The first source to be processed needs to be the source where two,
 	// or more points defining the linear region are to be found
@@ -828,11 +871,18 @@ void TOTCalib::Blender (TOTCalib * s2, TString outputName, int calibMethod) {
 
 
 void TOTCalib::Blender (TString outputName, int calibMethod) {
-
-	//
+    
+    if (calibMethod==__jakubek){
+        cout<<"You have chosen the calibration method described in NIMPR A 633 (2011) S262–S266"<<endl;
+        cout<<"You should have given one point in the low energy region and at least two points in the linear region."<<endl;
+        cout<<"The a and b coeff will be determined by a fit in the linear region."<<endl;
+        cout<<"The c and t coeff will be determined by a fit with the low energy function to the last spectrum in the order list."<<endl;
+        cout<<"The threshold energy will be ignored, and no fit with the surrogate function will be done."<<endl; 
+    }
+    
 	ReorderSources();
 	CreateGlobalKernelAndGetCriticalPoints(); // will only be used for sources with m_method == __lowStats
-
+    
 	// Files to write
 	TString fn_a = outputName + "_a.txt";
 	TString fn_b = outputName + "_b.txt";
@@ -909,9 +959,9 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
             
             if(m_verbose != __VER_QUIET) {            
                 cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
-            }else{
+            }/*else{
                 if (pix % 1000 == 0) cout<<endl<<"Processing pixel : "<<pix<<endl;
-            }          
+            }    */      
             
 			for (i = m_allSources.begin() ; i != m_allSources.end() ; i++ ) {
 
@@ -925,11 +975,13 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 			// Get the linear part to help the fit later
 			GetLinearFit( a, b, st->linearpairs );
 
-			// Global threshold from THL calibration
-			g->SetPoint( cntr, m_thresholdEnergy, 0.0 );        // E = threshold_energy --> 0 TOT counts
-			g->SetPointError(cntr, m_thresholdEnergy_Err, 0.0 );
-			cntr++;
-
+            if (calibMethod != __jakubek){
+                
+                // Global threshold from THL calibration
+                g->SetPoint( cntr, m_thresholdEnergy, 0.0 );        // E = threshold_energy --> 0 TOT counts
+                g->SetPointError(cntr, m_thresholdEnergy_Err, 0.0 );
+                cntr++;
+            }            
 		}
 
 		// Check if any of the sources had a fit status -1 := no data
@@ -953,19 +1005,20 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 			m_calibPoints_ic[pix] = st->pointsSave_ic;
 			m_calibPoints_it[pix] = st->pointsSave_it;
 
-			// [0] --> a
-			// [1] --> b
-			// [2] --> c
-			// [3] --> t
-			//TF1 * surr = new TF1(fn, surrogatefunc_calib, m_thresholdEnergy, 60.0, 4); // range in keV, 4 parameters
-			TF1 * surr = new TF1(fn, surrogatefunc_calib, 0.0, 60.0, 4); // range in keV, 4 parameters
-
-			//surr->SetParameters( 1, 1, 100, 1 );
-			//surr->SetParLimits(2, 10, 250);
-			//surr->SetParLimits(3, 0.1, 5.0);
-
             if (calibMethod == __standard){
-             
+                      
+                // [0] --> a
+                // [1] --> b
+                // [2] --> c
+                // [3] --> t
+                TF1 * surr = new TF1(fn, surrogatefunc_calib, m_thresholdEnergy, 60.0, 4); // range in keV, 4 parameters
+                //TF1 * surr = new TF1(fn, surrogatefunc_calib, 0.0, 60.0, 4); // range in keV, 4 parameters
+    cout<<m_thresholdEnergy<<" "<<endl;
+    g->Print();
+                //surr->SetParameters( 1, 1, 100, 1 );
+                //surr->SetParLimits(2, 10, 250);
+                //surr->SetParLimits(3, 0.1, 5.0);
+                
                 // "N"  Do not store the graphics function, do not draw
                 // "R"  Use the Range specified in the function range
                 // "M"  More. Improve fit results.
@@ -1030,12 +1083,17 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                     surr_pars[2] = calibTriesMap[indexmax][2];
                     surr_pars[3] = calibTriesMap[indexmax][3];
     
-                    cout << "[MAX] Pixel = " << pix << " | best fit index = " << indexmax << " | prob = " << calibTriesProb[indexmax] << " | status : " << calibTriesStatus[indexmax]
-                                                                                                                                                                            << " | a, b, c, t : "
-                                                                                                                                                                            << calibTriesMap[indexmax][0] << ", "
-                                                                                                                                                                            << calibTriesMap[indexmax][1] << ", "
-                                                                                                                                                                            << calibTriesMap[indexmax][2] << ", "
-                                                                                                                                                                            << calibTriesMap[indexmax][3] << endl;
+                    if (m_verbose !=__VER_QUIET){
+                        cout<<"------- Calibration results -------"<<endl;
+                        cout << "[MAX] Pixel = " << pix << " | best fit index = " << indexmax << " | prob = ";
+                        cout << calibTriesProb[indexmax] << " | status : " << calibTriesStatus[indexmax];
+                        cout << " | a, b, c, t : ";
+                        cout << calibTriesMap[indexmax][0] << ", ";
+                        cout << calibTriesMap[indexmax][1] << ", ";
+                        cout << calibTriesMap[indexmax][2] << ", ";
+                        cout << calibTriesMap[indexmax][3] << endl;
+
+                    }
     
                 } else {
     
@@ -1071,6 +1129,9 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                     calibProperties.push_back( 0.0 );
     
                 }
+                
+                // delete the function and TGraph
+                delete surr;
                                 
             } else if (calibMethod == __jakubek){  // In this case no fit with surrogate is needed
               
@@ -1113,9 +1174,6 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 
                 }
             }           
-
-			// delete the function and TGraph
-			delete surr;
 
 		} else {
 

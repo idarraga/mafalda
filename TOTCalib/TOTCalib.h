@@ -170,14 +170,14 @@ public :
 	void PushToBadPixelList(int x, int y);
 	bool PixelInBadPixelList(int pix);
 	vector<int> GetBadPixelList() { return m_badPixelList; };
-
+    
+    void Blender(TOTCalib * , TOTCalib *, TOTCalib *, TOTCalib *, TString, int = 0);
 	void Blender(TOTCalib * , TOTCalib *, TOTCalib *, TString, int = 0);
 	void Blender(TOTCalib * , TOTCalib *, TString, int = 0);
 	void Blender(TOTCalib * s2, TString outputName, int = 0);
 	void Blender(TString, int = 0);
 
 	void ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
-	void ProcessOneSourceLowStats(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
 	void ReorderSources();
 
 	//int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *);
@@ -286,11 +286,11 @@ private:
 	vector<double> m_par_t_v;
 	vector<double> m_surr_prob_v;
 
-	TH1F * m_par_a;
-	TH1F * m_par_b;
-	TH1F * m_par_c;
-	TH1F * m_par_t;
-	TH1F * m_surr_prob;
+//	TH1F * m_par_a;
+//	TH1F * m_par_b;
+//	TH1F * m_par_c;
+//	TH1F * m_par_t;
+//	TH1F * m_surr_prob;
 
 	// Threshold information
 	double m_thresholdEnergy;
