@@ -39,11 +39,21 @@ using namespace std;
 #define __npars_surrogate			    4
 #define __npars_lowe_fitfunc            7
 #define __min_tmathprobtest_val      0.90
-#define __max_fit_tries                10
+#define __max_fit_tries                100
 #define __fit_pars_randomization_max 1000
 #define __fit_pars_randomization_min   20
 
 #define __fraction_of_height_range_id 0.5
+
+// Parameter hints for low energy function fit
+// FIXME: this should be done without user input
+// Could fit the global spectrum with high fit tries and choose the best found parameters
+#define __lowen_sigma_hint 2.0
+#define __lowen_para_hint 3.0 // useless if at least 2 fits in the linear region succeeds
+#define __lowen_parb_hint 80.0 // useless if at least 2 fits in the linear region succeeds
+#define __lowen_parc_hint 200.0
+#define __lowen_part_hint 0.0
+#define __lowen_par_fraction_random 0.4 // range for randomization around the given hint (i.e. put 0.0 to set the hint without randomization) 
 
 // Prototypes
 double GausFuncAdd(double * x, double * par);
@@ -64,6 +74,9 @@ public:
 	map<int, int> GetCalibPointsRegion(){ return m_calibPointsRegion; };
 	double GetOneEnergyMatch(int i){return m_calibPoints[i]; };
 
+	void CalibIgnorePoint(int i){ m_calibPoints[i]*= -1; };
+	void CalibSetPointRegion(int i, int reg){ m_calibPointsRegion[i] = reg; }
+
 	enum {
 		__linear_reg = 0,
 		__lowenergy_reg,
@@ -74,7 +87,7 @@ private:
 
 
 	// TOT, Energy for the particular source or fluorescence data
-	map<int, double> m_calibPoints;
+	map<int, double> m_calibPoints; // key: peak number in the source's histogram, value: energy of the peak (as defined in CalibHandler constructor) 
 	map<int, int> m_calibPointsRegion;
 	string m_sourceName;
 
@@ -107,11 +120,18 @@ public :
 
 	//TTree * m_tree;
 
-	TOTCalib();
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames);
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *);
+    // Methods for calibration
+    enum {
+        __standard = 0,
+        __lowStats,        
+        __jakubek // Method proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+    };
 
-	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames);
+	TOTCalib();   
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method = __standard);
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *, int method = __standard);
+
+	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method = __standard);
 
 	virtual ~TOTCalib();
 	virtual Int_t    Cut(Long64_t entry);
@@ -160,23 +180,25 @@ public :
 	void PushToBadPixelList(int x, int y);
 	bool PixelInBadPixelList(int pix);
 	vector<int> GetBadPixelList() { return m_badPixelList; };
-
-	void Blender(TOTCalib * , TOTCalib *, TOTCalib *, TString);
-	void Blender(TOTCalib * , TOTCalib *, TString);
-	void Blender(TOTCalib * s2, TString outputName);
-
-	void Blender(TString);
+    
+    void Blender(TOTCalib * , TOTCalib *, TOTCalib *, TOTCalib *, TString, int = 0);
+	void Blender(TOTCalib * , TOTCalib *, TOTCalib *, TString, int = 0);
+	void Blender(TOTCalib * , TOTCalib *, TString, int = 0);
+	void Blender(TOTCalib * s2, TString outputName, int = 0);
+	void Blender(TString, int = 0);
 
 	void ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
 	void ReorderSources();
 
-	int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *);
+	//int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *);
+    int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *, double = 0.0);    
 	TF1 * FittingFunctionSelector(double, TOTCalib *, int);
 	void GetLinearFit(double & a, double & b, vector< pair<double,double> > p);
-	void RandomFitParameters(TF1 * f, TH1 * h, int tot);
+	void RandomFitParameters(TF1 * f, TH1 * h, int tot, TOTCalib *);
 
 	vector<pair<double, double> > Extract_E_TOT_Points(int, TOTCalib * );
 	int GetNumberOf_E_TOT_Points (TOTCalib * s);
+	int GetNumberOf_E_TOT_Points_Positive (TOTCalib * s);
 
 	double DerivativeFivePointsStencil(TF1 *, double, double);
 	double VectorSum(vector<double>);
@@ -201,13 +223,31 @@ public :
 	enum {
 		__VER_DEBUG_LOOP = 0,
 		__VER_DEBUG,
-		__VER_INFO
+		__VER_INFO,
+		__VER_QUIET
 	};
 
 	double GetKernelBandWidth(){ return m_bandwidth; };
 	double SetKernelBandWidth(double b) {return m_bandwidth = b; };
 
 	int GetNBins() { return m_nbins; };
+
+	void IgnorePoint(int i){ m_calhandler->CalibIgnorePoint(i); };
+	void SetPointRegion(int i, int reg){ m_calhandler->CalibSetPointRegion(i,reg); };
+
+	int GetCalibMethod() { return m_method; };
+
+	vector<vector<double> > Get_m_histo(){return m_calibhistos;}; // each pixel has its own histogram
+	void SetGlobalHisto(vector<double> v){m_globalhisto=v;}; // every histogram are merged in this vector
+
+	void SetGlobalCriticalPoints(vector<double> max, vector<double> min){ 
+		m_global_max=max;
+		m_global_min=min;	};
+	vector<double> GetGlobalMaximumPoints(){return m_global_max;};
+	vector<double> LowStatsPeakSelection( vector<double> peaks, unsigned int s, TOTCalib * source, double bandwidth);
+
+	void CreateGlobalKernelAndGetCriticalPoints(); 
+
 
 private:
 	//////////////////////////////////////////////////////////////////
@@ -256,11 +296,11 @@ private:
 	vector<double> m_par_t_v;
 	vector<double> m_surr_prob_v;
 
-	TH1F * m_par_a;
-	TH1F * m_par_b;
-	TH1F * m_par_c;
-	TH1F * m_par_t;
-	TH1F * m_surr_prob;
+//	TH1F * m_par_a;
+//	TH1F * m_par_b;
+//	TH1F * m_par_c;
+//	TH1F * m_par_t;
+//	TH1F * m_surr_prob;
 
 	// Threshold information
 	double m_thresholdEnergy;
@@ -294,6 +334,11 @@ private:
 	int __matrix_height;
 	int __matrix_width;
 
+	int m_method; //calibration method
+
+	vector<double> m_globalhisto;	
+	vector<double> m_global_max; // Critical points of the whole map kernel
+	vector<double> m_global_min; //
 };
 
 #endif

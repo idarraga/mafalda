@@ -1,0 +1,12 @@
+TOTCalib/*.txt
+TOTCalib/*.root
+*.o 
+*.so 
+TOTCalib/TOTCalibDict*
+*.pcm
+
+// Qt creator files
+*.includes
+*.creator
+*.config
+*.files
