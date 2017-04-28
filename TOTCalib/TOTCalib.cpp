@@ -231,22 +231,24 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
 		// return random numbers in ]0,1]
 		//m_rand1->RndmArray(__npars_lowe_fitfunc, pars);
 
-        // p0 is the amplitude and can always be taken from the histogram
-        // For now --> (20, 50)
-        f->SetParameter(0, m_rand1->Rndm()*30. + 20. );
+        // Range for randomization --> (hint-hint*fraction/2 , hint+hint*fraction/2)   
+        // Hints for each parameter are given in TOTCalib.h
+        double xmin = 1. - (__lowen_par_fraction_random)/2 ; // normalized to 1
+        // p0 is the amplitude (hint taken from the histogram)
+        f->SetParameter(0, h->GetBinContent(h->FindBin(tot)) * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );        
         // p1 is the mean --> fixed in PeakFit()
         // p2 is the sigma 
-        f->SetParameter(2, 2.);
-        // p3 is a. Random --> (2, 4)
-        f->SetParameter(3, m_rand1->Rndm()*2. + 2.);
-        // p4 is b. Random --> (20, 100)
-        f->SetParameter(4, m_rand1->Rndm()*80. + 20.);
+        f->SetParameter(2, __lowen_sigma_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );       	
+        // p3 is a --> fixed later on if at least 2 fits in the linear region succeeded
+        f->SetParameter(3, __lowen_para_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );       
+        // p4 is b --> fixed later on if at least 2 fits in the linear region succeeded
+        f->SetParameter(4, __lowen_parb_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );       
         // p5 is c. Random --> (-50, 350)
-        f->SetParameter(5, m_rand1->Rndm()*100. + 150.);//175.
+        f->SetParameter(5, __lowen_parc_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );       
         // p6 is t. Random --> (1, 6)
-        f->SetParameter(6,0.);
-        
-        //cout<<f->GetParameter(0)<<" "<<f->GetParameter(1)<<" "<<f->GetParameter(2)<<" "<<f->GetParameter(3)<<" "<<f->GetParameter(4)<<" "<<f->GetParameter(5)<<" "<<f->GetParameter(6)<<endl;
+        f->SetParameter(6, __lowen_part_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );       
+
+        //cout<<"const: "<<f->GetParameter(0)<<" mean: "<<f->GetParameter(1)<<" sigma: "<<f->GetParameter(2)<<" a: "<<f->GetParameter(3)<<" b: "<<f->GetParameter(4)<<" c: "<<f->GetParameter(5)<<" t: "<<f->GetParameter(6)<<endl;
         
         
 	} else if ( TString(f->GetName()).Contains("gf_linear") ) {

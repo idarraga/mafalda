@@ -45,6 +45,16 @@ using namespace std;
 
 #define __fraction_of_height_range_id 0.5
 
+// Parameter hints for low energy function fit
+// FIXME: this should be done without user input
+// Could fit the global spectrum with high fit tries and choose the best found parameters
+#define __lowen_sigma_hint 2.0
+#define __lowen_para_hint 3.0 // useless if at least 2 fits in the linear region succeeds
+#define __lowen_parb_hint 80.0 // useless if at least 2 fits in the linear region succeeds
+#define __lowen_parc_hint 200.0
+#define __lowen_part_hint 0.0
+#define __lowen_par_fraction_random 0.4 // range for randomization around the given hint (i.e. put 0.0 to set the hint without randomization) 
+
 // Prototypes
 double GausFuncAdd(double * x, double * par);
 void printProgBar( int );
