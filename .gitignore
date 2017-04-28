@@ -4,3 +4,9 @@ TOTCalib/*.root
 *.so 
 TOTCalib/TOTCalibDict*
 *.pcm
+
+// Qt creator files
+*.includes
+*.creator
+*.config
+*.files
