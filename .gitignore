@@ -1,2 +1,6 @@
 TOTCalib/*.txt
 TOTCalib/*.root
+*.o 
+*.so 
+TOTCalib/TOTCalibDict*
+*.pcm
