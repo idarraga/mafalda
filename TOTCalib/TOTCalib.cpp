@@ -15,8 +15,19 @@
 
 #include <time.h>
 
+#include <vector>
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <queue>
+#include <map>
+#include <algorithm>
+
 TOTCalib::TOTCalib(){
 	m_TOTMultiplierFactor = 1.0;
+	__matrix_height = 256;
+    __matrix_width = 256;
+    __matrix_size = __matrix_height * __matrix_height;
 }
 
 void TOTCalib::Loop()
@@ -266,7 +277,7 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
 
 }
 
-vector<double> TOTCalib::LowStatsPeakSelection( vector<double> peaks,unsigned int size, TOTCalib * source, double bandwidth){ //EDIT:JS019
+vector<double> TOTCalib::LowStatsPeakSelection( vector<double> peaks,unsigned int size, TOTCalib * source, double bandwidth){
 	vector<double> global_p = source->GetGlobalMaximumPoints();
 	vector<double> selected_p;
 
@@ -585,62 +596,77 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 		totval = (*i).second;
 
 		// Select the appropiated function
+		int status;
 		gf = FittingFunctionSelector( (*i).first, s , calibPointIterator );
-		if(m_verbose == __VER_DEBUG) cout << " [ fit func --> " << gf->GetName() << "] ";
 
-		// Fit in the peak
-        int status = 0;
-        if ( TString(gf->GetName()).Contains("gf_lowe") ){
-            status = PeakFit(s, pix, totval, gf, hf, sto, (*i).first);
-        }else{
-            status = PeakFit(s, pix, totval, gf, hf, sto);
-        }
-        if(m_verbose == __VER_DEBUG) cout << " { status : " << status << " } ";
-        Double_t func_TOTatMax = gf->GetMaximumX();                    
+		if (totval >=0){ // totval will be -1 if not enough peaks were identified
 
-		// These are the points for the surrogate function fit
-		constantfit = gf->GetParameter(0);
-		totmeanfit = gf->GetParameter(1);
-		sigmafit = TMath::Abs ( gf->GetParameter(2) );
-        
-        if ( (*EpointItr).second > 0. ){ // only fill graph if positive energy (the graph is used for surrogate fit in Blender)
-            
-            if ( TString(gf->GetName()).Contains("gf_lowe") ) {
-                g->SetPoint(cntr, (*i).first, func_TOTatMax ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
-                g->SetPointError(cntr, 0., sigmafit );
-            }else{
-                g->SetPoint(cntr, (*i).first, totmeanfit ); // E, TOT (from the fit in this context)
-                g->SetPointError(cntr, 0., sigmafit );
-            }
-            cntr++; 
-        }
+			if(m_verbose == __VER_DEBUG) cout << " [ fit func --> " << gf->GetName() << "] ";
+			// Fit in the peak
+       		if ( TString(gf->GetName()).Contains("gf_lowe") ){
+            	status = PeakFit(s, pix, totval, gf, hf, sto, (*i).first);
+        	}else{
+            	status = PeakFit(s, pix, totval, gf, hf, sto);
+       		}
+			if(m_verbose == __VER_DEBUG) cout << " { status : " << status << " } ";
+			Double_t func_TOTatMax = gf->GetMaximumX();
+			
+			if ( (*EpointItr).second > 0. ){ // only fill graph if positive energy (the graph is used for surrogate fit in Blender)
+            	constantfit = gf->GetParameter(0);
+				totmeanfit = gf->GetParameter(1);
+				sigmafit = TMath::Abs ( gf->GetParameter(2) );
+            	if ( TString(gf->GetName()).Contains("gf_lowe") ) {
+            	    g->SetPoint(cntr, (*i).first, func_TOTatMax ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
+            	    g->SetPointError(cntr, 0., sigmafit );
+            	} else {
+            	    g->SetPoint(cntr, (*i).first, totmeanfit ); // E, TOT (from the fit in this context)
+            	    g->SetPointError(cntr, 0., sigmafit );
+            	}
+				
+				cntr++;
 
+				if ( (*regionItr).second == CalibHandler::__linear_reg ) {
+					sto->linearpairs.push_back( make_pair( (*i).first , totmeanfit ) );  // (E, TOT)
+				}
+	
+			}
 
+			if( TString(gf->GetName()).Contains("gf_lowe") ) {  // in this case store the extra params
+				sto->pointsSave_ia.push_back( gf->GetParameter(3) );
+				sto->pointsSave_ib.push_back( gf->GetParameter(4) );
+				sto->pointsSave_ic.push_back( gf->GetParameter(5) );
+				sto->pointsSave_it.push_back( gf->GetParameter(6) );
+			} else {
+				sto->pointsSave_ia.push_back( 0. );
+				sto->pointsSave_ib.push_back( 0. );
+				sto->pointsSave_ic.push_back( 0. );
+				sto->pointsSave_it.push_back( 0. );
+			}
+
+		} else { //save -1 value for output file, but do not use for surrogate
+			totmeanfit = -1;
+			constantfit = -1;
+			sigmafit = -1;
+			status = -1; //will still try to fit the surrogate w/o this source (unless they all have -1 status)
+			if( TString(gf->GetName()).Contains("gf_lowe") ) {  // in this case store the extra params
+				sto->pointsSave_ia.push_back( -1.);
+				sto->pointsSave_ib.push_back( -1.);
+				sto->pointsSave_ic.push_back( -1.);
+				sto->pointsSave_it.push_back( -1.);
+			} else {
+				sto->pointsSave_ia.push_back( 0. );
+				sto->pointsSave_ib.push_back( 0. );
+				sto->pointsSave_ic.push_back( 0. );
+				sto->pointsSave_it.push_back( 0. );
+			}
+		}
+
+		sto->pointsSave.push_back( make_pair( (*EpointItr).second, totmeanfit ) );  // The mean of the fit
 		sto->pointsSaveSigmas.push_back( sigmafit );                       // The sigma of the fit
 		sto->pointsSaveConstants.push_back( constantfit );                 // The constant of the fit
 		sto->calibTOTPeaks.push_back( totval );                            // The original TOT val where the fit starts
 		sto->peakFitStatus.push_back( status );
 
-		if( TString(gf->GetName()).Contains("gf_lowe") ) {  // in this case store the extra params
-            sto->pointsSave.push_back( make_pair( (*EpointItr).second, func_TOTatMax ) );            
-			sto->pointsSave_ia.push_back( gf->GetParameter(3) );
-			sto->pointsSave_ib.push_back( gf->GetParameter(4) );
-			sto->pointsSave_ic.push_back( gf->GetParameter(5) );
-			sto->pointsSave_it.push_back( gf->GetParameter(6) );
-		} else {
-            sto->pointsSave.push_back( make_pair( (*EpointItr).second, totmeanfit ) );  // The mean of the fit             
-			sto->pointsSave_ia.push_back( 0. );
-			sto->pointsSave_ib.push_back( 0. );
-			sto->pointsSave_ic.push_back( 0. );
-			sto->pointsSave_it.push_back( 0. );
-		}
-
-		//////////////////////////////////////////////////////////////////
-		// Verify if this fit has been requested for the linear region
-		// cout << "[REGION] Calib region : " << (*regionItr).first << " --> " << (*regionItr).second << endl;
-		if ( (*regionItr).second == CalibHandler::__linear_reg && (*EpointItr).second > 0. ) {
-			sto->linearpairs.push_back( make_pair( (*i).first , totmeanfit ) );  // (E, TOT)
-		}
 		regionItr++;
         EpointItr++;
 
@@ -891,6 +917,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 	TString fn_c = outputName + "_c.txt";
 	TString fn_t = outputName + "_t.txt";
 	TString fn_prob = outputName + "_prob.txt";
+	m_outputName = outputName; // for root file
 
 	ofstream f_a(fn_a, ostream::out);
 	ofstream f_b(fn_b, ostream::out);
@@ -988,14 +1015,20 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 
 		// Check if any of the sources had a fit status -1 := no data
 		vector<int> allstatus = st->peakFitStatus;
-		bool missingInfo = false;
-		if ( find(allstatus.begin(), allstatus.end(), -1) !=  allstatus.end() ) { // found -1
-			missingInfo = true;
+		int surrogateStatus;
+		int badFitCounter = count(allstatus.begin(), allstatus.end(), -1);
+		if ( badFitCounter == (int)allstatus.size() ){ 
+			surrogateStatus = __no_data; //cannot build surrogate
+		} else if (badFitCounter > 0){
+			surrogateStatus = __partial_data; // good to go, but fit may be wrong
+		} else {
+			surrogateStatus = __good_data; // good to go
 		}
+		
 
 
 		// If all fits were good
-		if( totalNPoints > 0 && !missingInfo ) {
+		if( totalNPoints > 0 && surrogateStatus != __no_data ) {
 
 			// store points
 			m_calibTOTPeaks[pix] = st->calibTOTPeaks;
@@ -1015,7 +1048,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                 // [3] --> t
                 TF1 * surr = new TF1(fn, surrogatefunc_calib, m_thresholdEnergy, 60.0, 4); // range in keV, 4 parameters
                 //TF1 * surr = new TF1(fn, surrogatefunc_calib, 0.0, 60.0, 4); // range in keV, 4 parameters
-    cout<<m_thresholdEnergy<<" "<<endl;
+   // cout<<m_thresholdEnergy<<" "<<endl;
     g->Print();
                 //surr->SetParameters( 1, 1, 100, 1 );
                 //surr->SetParLimits(2, 10, 250);
@@ -1084,6 +1117,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                     surr_pars[1] = calibTriesMap[indexmax][1];
                     surr_pars[2] = calibTriesMap[indexmax][2];
                     surr_pars[3] = calibTriesMap[indexmax][3];
+
     
                     if (m_verbose !=__VER_QUIET){
                         cout<<"------- Calibration results -------"<<endl;
@@ -1120,6 +1154,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                     calibConst.push_back( surr_pars[3] );
     
                     calibProperties.push_back( calibTriesProb[indexmax] );
+                    m_surrogateStatus[pix] = surrogateStatus;
     
                 } else {
     
@@ -1129,6 +1164,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                     calibConst.push_back( 0.0 );
     
                     calibProperties.push_back( 0.0 );
+                    m_surrogateStatus[pix] = __no_data;
     
                 }
                 
@@ -1160,6 +1196,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
     
                     calibProperties.push_back( 0.0 );
                     calibTriesProb.push_back( 0. );
+                    m_surrogateStatus[pix] = surrogateStatus;
                     
                     if (m_verbose !=__VER_QUIET) {
                         cout<<"------- Calibration results -------"<<endl;
@@ -1173,6 +1210,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                     calibConst.push_back( 0.0 );
                 	calibProperties.push_back( 0.0 );
                 	calibTriesProb.push_back( 0. );
+                	m_surrogateStatus[pix] = __no_data;
 
                 }
             }           
@@ -1181,7 +1219,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 
 			// This will get print and interrupt the progress bar
 			// ad a couple of extra endl
-			cout << "Surrogate function [ " << fn << " ]" << " can not be built.  This can be a masked pixel, noisy, or too low stats." << endl;
+			cout << "Surrogate function [ " << fn << " ]" << " cannot be built.  This can be a masked pixel, noisy, or too low stats." << endl;
 			// Save the fit constants
 			calibConst.push_back( 0.0 );
 			calibConst.push_back( 0.0 );
@@ -1189,6 +1227,17 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 			calibConst.push_back( 0.0 );
 
 			calibProperties.push_back( 0.0 );
+			m_surrogateStatus[pix] = __no_data;
+
+			//still save info for output
+			m_calibTOTPeaks[pix] = st->calibTOTPeaks;
+			m_calibPoints[pix] = st->pointsSave;
+			m_calibPointsSigmas[pix] = st->pointsSaveSigmas;
+			m_calibPointsConstants[pix] = st->pointsSaveConstants;
+			m_calibPoints_ia[pix] = st->pointsSave_ia;
+			m_calibPoints_ib[pix] = st->pointsSave_ib;
+			m_calibPoints_ic[pix] = st->pointsSave_ic;
+			m_calibPoints_it[pix] = st->pointsSave_it;
 
 		}
 
@@ -1230,14 +1279,14 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 			f_prob << endl;
 		}
 		 */
-
+		/* not used vv
 		// Store info for final histograms
 		m_par_a_v.push_back( m_calibSurrogateConstants[pix][0] );
 		m_par_b_v.push_back( m_calibSurrogateConstants[pix][1] );
 		m_par_c_v.push_back( m_calibSurrogateConstants[pix][2] );
 		m_par_t_v.push_back( m_calibSurrogateConstants[pix][3] );
 		m_surr_prob_v.push_back( calibTriesProb[indexmax] );
-
+		*/
 	}
 
 	// Send the whole matrix to the output files
@@ -1299,37 +1348,101 @@ TF1 * TOTCalib::FittingFunctionSelector(double /*E*/, TOTCalib * s, int pointInd
 	return g;
 }
 
+
 void TOTCalib::Finalize(){
-
-	TH1F * ha = CreateParameterHistogram(m_par_a_v, "a");
-	TH1F * hb = CreateParameterHistogram(m_par_b_v, "b");
-	TH1F * hc = CreateParameterHistogram(m_par_c_v, "c");
-	TH1F * ht = CreateParameterHistogram(m_par_t_v, "t");
-	TH1F * hprob = CreateParameterHistogram(m_surr_prob_v, "Prob");
-
-	//TH1I * h_5000_Fe = GetHisto(50000, "Fe55_50000");
-
+	// save spectrums, kernel functions, gaussian and surrogate parameters in root file
+	cout << "[INFO]	Saving calibration results." << endl;
+	
+	Int_t split = 0;
+	Int_t bsize = 256000;
 	// prepare output ROOT
-	m_output_root = new TFile("output_calib.root", "RECREATE");
-	m_output_root->cd();
+	TString rootName = m_outputName + ".root";
+	m_output_root = new TFile(rootName.Data(), "RECREATE");
+	TTree *tsurr = new TTree("surrogateFunction","surrogateFunction"); // will contain vectors of the surrogate parameters
+	
+	// first, a tree for the surrogate function
+	map<int, vector<double> > surr_p;
+	map<int, int> surr_status;
+	tsurr->Branch("parameters", "map<int, vector<double> >", &surr_p,bsize, split);
+	tsurr->Branch("status","map<int, int>", &surr_status,bsize, split);
 
-	vector<TH1*>::iterator i = m_histosToSave.begin();
-	for( ; i != m_histosToSave.end() ; i++ ) {
-		(*i)->Write();
+	surr_p =  m_calibSurrogateConstants;
+	surr_status = m_surrogateStatus;
+
+	tsurr->Fill();
+	tsurr->Write();
+
+	TTree *tparam = new TTree("parameters", "parameters");
+	vector<TOTCalib *>::iterator i;
+	map<int, vector< pair<double, double> > > points; //energy&mean
+	map<int, vector<double> > sigmas;
+	map<int, vector<double> > constants;
+	pair<double, double> thres; //threshold + error
+	vector<TString> sn ; //source name
+
+	// low energy fit parameter
+	map<int, vector<double> > calibPoints_ia;
+	map<int, vector<double> > calibPoints_ib;
+	map<int, vector<double> > calibPoints_ic;
+	map<int, vector<double> > calibPoints_it;
+	
+	tparam->Branch("energyAndGausMean", "map<int, vector< pair<double, double> > >", &points, bsize,split);
+	tparam->Branch("gausSigma", "map<int, vector<double> >" , &sigmas, bsize,split);
+	tparam->Branch("gausConst" , "map<int, vector<double> >", &constants, bsize,split);
+	tparam->Branch("threshold", &thres);
+	tparam->Branch("sources","vector<TString>", &sn, 16000,split);
+	tparam->Branch("low_ia", "map<int, vector<double> >", &calibPoints_ia, bsize, split);
+	tparam->Branch("low_ib", "map<int, vector<double> >", &calibPoints_ib, bsize, split);
+	tparam->Branch("low_ic", "map<int, vector<double> >", &calibPoints_ic, bsize, split);
+	tparam->Branch("low_it", "map<int, vector<double> >", &calibPoints_it, bsize, split);
+
+	points = m_calibPoints;
+	sigmas = m_calibPointsSigmas;
+	constants = m_calibPointsConstants;
+	thres = make_pair( m_thresholdEnergy, m_thresholdEnergy_Err);
+	calibPoints_ia = m_calibPoints_ia;
+    calibPoints_ib = m_calibPoints_ib;
+    calibPoints_ic = m_calibPoints_ic;
+    calibPoints_it = m_calibPoints_it;
+
+	for(i = m_allSources.begin() ; i != m_allSources.end() ; i++ ) {
+		sn.push_back( (*i)->GetCalibHandler()->GetSourcename() ); // save source name in order
 	}
 
-	ha->Write();
-	hb->Write();
-	hc->Write();
-	ht->Write();
-	hprob->Write();
-	//h_5000_Fe->Write();
+	tparam-> Fill();
+	tparam->Write("", TObject::kOverwrite);
 
-	//h_5000_Fe->Write();
+
+	double bandwidth;
+	vector< vector<double> > spectrum;
+	map<int, double> CHpoints; // points defined in calib handler object
+	map<int, int> CHregions; // regions defined in calib handler object
+	map<int, vector<double> > max; // identified peaks (required by DrawFullPixelCalib)
+
+	for(i = m_allSources.begin() ; i != m_allSources.end() ; i++ ) {
+		TString sname = (*i)->GetCalibHandler()->GetSourcename();
+		TTree *tsour = new TTree(sname.Data(),sname.Data());
+		tsour->Branch("spectrumVec", "vector <vector<double> >", &spectrum, bsize,split);
+		tsour->Branch("points", "map<int, double>", &CHpoints, 32000,split);
+		tsour->Branch("regions", "map<int, int>", &CHregions, 32000,split);
+		tsour->Branch("maximums", "map<int, vector<double> >", &max, bsize, split);
+		tsour->Branch("bandwidth", &bandwidth);
+
+	 	spectrum = (*i)->Get_m_histo();
+	 	CHpoints = (*i)->GetCalibHandler()->GetCalibPoints();
+	 	CHregions = (*i)->GetCalibHandler()->GetCalibPointsRegion();
+		max = (*i)->GetMaxPeaksIdentified();
+	 	bandwidth = (*i)->GetKernelBandWidth();
+	 	tsour->Fill();
+		tsour->Write("", TObject::kOverwrite);
+	}
 
 	m_output_root->Close();
 
+	cout << "[DONE]	See output calibration file --> " << rootName.Data() << endl;
+	
 }
+
 
 
 TH1F * TOTCalib::CreateParameterHistogram(vector<double> v, TString name){
@@ -1460,7 +1573,7 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 	// remove as many as necesary
 	if (s->GetCalibMethod() == __lowStats && peaks.size()> calibPoints.size() ) peaks = LowStatsPeakSelection(peaks, calibPoints.size(), s, loc_bandwidth); // better peak selection
 	while( peaks.size() > calibPoints.size() ) { // regular peak selection, should probably be modified
-		TH1I * th = s->GetHisto(pix, "test");
+		TH1I * th = s->GetHisto(pix, "spectrum");
 		vector<double> integ;
 		int npeaks = (int)peaks.size();
 		for ( int i = 0 ; i < (int)peaks.size() ; i++ ) {
@@ -1493,8 +1606,16 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 	//  this particular pixel can be noisy or simply masked.
 	// Also is there is less peaks identified than calibration points
 	//  this pixel can not be processed.
-	if( peaks.empty() || peaks.size() < calibPoints.size() ) {
-		return points; // return empty
+	if( peaks.empty() || peaks.size() < calibPoints.size() ) { //JS 23/03/17
+		cout << "[WARNING] Not enough peaks where identified for pixel " << pix << " and source "<< s->GetCalibHandler()->GetSourcename() <<endl; 
+		cout << "          Setting all peaks to -1." << endl;
+		for (int k = 0; k < (int)calibPoints.size(); k++){
+			points.push_back(
+				make_pair(
+					TMath::Abs(calibPoints[k]),
+					-1.));
+		}
+		return points;
 	}
 
 	if(m_verbose == __VER_DEBUG) cout << "First guess, points for : " <<  s->GetCalibHandler()->GetSourcename() <<  "  |  ";
@@ -1832,6 +1953,7 @@ TH1I * TOTCalib::GetHisto(int pix, TString extraName){
 	}
 
 	return h;
+
 }
 
 TF1 * TOTCalib::GetKernelDensityFunction(int i){
@@ -2223,7 +2345,7 @@ void TOTCalib::DrawFullPixelCalib(int pix) {
 	leg1->SetFillColor(kWhite);
 	leg1->SetBorderSize(1);
 
-	vector<int> original_totval = m_calibTOTPeaks[pix];
+	//vector<int> original_totval = m_calibTOTPeaks[pix];
 
 	TF1 * gf; TF1 * gf_clone;
 
@@ -2270,7 +2392,6 @@ void TOTCalib::DrawFullPixelCalib(int pix) {
 
 		int nCalibPoints = (int)calibPoints.size();
 		double pos_offset = 1.;
-
 		// Check if it's possible to draw
 		if ( (int) peaks.size() < nCalibPoints ) {
 			cout << "Not enough peaks were identified for this pixel !" << endl;
@@ -2497,20 +2618,6 @@ CalibHandler::CalibHandler (string source) {
 		// Indium
 		// Fluorescence  24.2 keV
 		m_calibPoints[0] = 24.2; //
-		m_calibPointsRegion[0] = __linear_reg;
-
-	} else if ( ! TString(source).CompareTo( "Cd_fluo", TString::kIgnoreCase )
-			||
-			! TString(source).CompareTo( "Cd-fluo", TString::kIgnoreCase )
-			||
-			! TString(source).CompareTo( "Cdfluo", TString::kIgnoreCase )
-			||
-			! TString(source).CompareTo( "Cd", TString::kIgnoreCase )
-	) {
-
-		// Indium
-		// Fluorescence  24.2 keV
-		m_calibPoints[0] = 23.1; //
 		m_calibPointsRegion[0] = __linear_reg;
 
 	} else if ( ! TString(source).CompareTo( "Cd_fluo_TPXGaAs", TString::kIgnoreCase )
