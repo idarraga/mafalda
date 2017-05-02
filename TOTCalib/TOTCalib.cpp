@@ -1281,6 +1281,264 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 
 }
 
+void TOTCalib::SavePixelResolution(){
+
+/* Function to save resolution data of each pixel for a single low
+ * energy X-ray source without doing the calibration (single pixel clusters only).
+ * If several peaks are present (e.g. an overlap peak), it selects the peak with highest amplitude
+ *
+ * To be used with only one source, just after calling Loop() in runTOTCalib.C
+ * Example:
+ *  TOTCalib * pCd = new TOTCalib("MAFOutput_TOTCalibrationPreparation.root","ZrFluo", minpix, maxpix, 200, nTotalFrames);
+ *  pCd->SetKernelBandWidth(25);
+ *  pCd->Loop();
+ *  pCd->SavePixelResolution();
+ *
+ * Everything must be commented out after its use (i.e. Blender(), Finalize etc...)
+ * Number of frames and pixels can be set at the start of the macro, as
+ * for the calibration.
+ *
+ * It saves a root files containing a tree with fit results of all peaks (if there are more
+ * than one, e.g. AmIn or overlaping peak), and maps containing only one peak (the one
+ * with highest counts at mean for now).
+ *
+ * Use ExplorePixelTOTResolution to display spectra and fits by pointing the pixel with mouse!
+ *
+ * It could have been done in mafalda_framework but I wanted to use the
+ * algos from TOTCalib code which is appropriate for this purpose. It is an
+ * adapted copy of Blender() followed by an adapted copy of DrawFullPixelCalib()
+ *
+*/
+
+    //************************* Prepare what should be saved ***************************
+    // I want a root file with resolutions
+    TFile * m_output_root_Thomas = new TFile("output_pixelResolution.root", "RECREATE");
+     m_output_root_Thomas->cd();
+    TTree *tree = new TTree("SavePixelResolution","SavePixelResolution");
+    int br_int_pixID;
+    int br_int_selectedpeak_ID;
+    TH1I *br_TH1_spectrum = 0;
+    TF1 *br_TF1_KernelFunction = 0;
+    vector<double> br_double_sigmafit;
+    vector<double> br_double_totmeanfit;
+    vector<double> br_double_constantfit;
+    vector<double> br_double_afit;
+    vector<double> br_double_bfit;
+    vector<double> br_double_cfit;
+    vector<double> br_double_tfit;
+
+    Int_t split = 0;
+    Int_t bsize = 64000;
+    tree->Branch("pixelID", &br_int_pixID);
+    tree->Branch("selectedPeakID", &br_int_selectedpeak_ID);
+    tree->Branch("Histo_Spectrum", "TH1I", &br_TH1_spectrum, bsize,split);
+    tree->Branch("Kernel_Function", "TF1", &br_TF1_KernelFunction, bsize,split);
+    tree->Branch("FitSigma", &br_double_sigmafit);
+    tree->Branch("FitMean", &br_double_totmeanfit);
+    tree->Branch("FitConstant", &br_double_constantfit);
+    tree->Branch("Fita", &br_double_afit);
+    tree->Branch("Fitb", &br_double_bfit);
+    tree->Branch("Fitc", &br_double_cfit);
+    tree->Branch("Fitt", &br_double_tfit);
+
+    // I also want to save maps
+    TH2I* SingleHitCounts = new TH2I("SingleHitCounts","SingleHitCounts",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2I* SingleHitKernelTOTpeaks = new TH2I("SingleHitKernelTOTpeaks","SingleHitKernelTOTpeaks",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2I* SingleHitFitMeans = new TH2I("SingleHitFitMeans","SingleHitFitMeans",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2I* SingleHitFitSigmas = new TH2I("SingleHitFitSigmas","SingleHitFitSigmas",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2I* SingleHitFitConstants = new TH2I("SingleHitFitConstants","SingleHitFitConstants",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+
+    /********************** Part mainly inspired From Blender() *******************************
+     *
+     * The goal is to copy Blender and write data stored in vector "store"
+     * (filled with ProcessOneSource) to the rootfile
+     *
+    */
+
+    // Only one source used for this algo
+    m_allSources.push_back( this ); // vector<TOTCalib *> m_allSources;
+    Int_t sour_num = 0;
+
+    double maxrange = (double) m_allSources[sour_num]->GetNBins();
+
+    m_gf_linear = new TF1("gf_linear", "gaus(0)", 0., maxrange);
+    m_gf_linear->SetParameters(1, 1, m_bandwidth); //!!Please check if m_bandwidth is ok (if many sources)
+
+    m_gf_lowe = new TF1("gf_lowe", fitfunc_lowen, 0., maxrange, __fitfunc_lowen_npars);
+    m_gf_lowe->SetParameters(1, 1, m_bandwidth, 1,1,1,1); //!!Please check if m_bandwidth is ok (if many sources)
+
+    // iterate over pixels
+    for (int pix = m_minpix ; pix <= m_maxpix ; pix++) {
+
+        // Skip the bad pixels
+        if ( PixelInBadPixelList(pix) ) continue;
+
+        // Vectors to save the fit constants and properties
+        vector<double> calibConst;
+        vector<double> calibProperties;
+
+        // Name for the surrogate function
+        TString fn = "surr_pix_";
+        fn += pix;
+
+        int totalNPoints = GetNumberOf_E_TOT_Points( m_allSources[sour_num] );
+        
+        // Set of vectors used to store info
+        store * st = new store;
+        TGraphErrors * g = 0x0;
+             
+        // Save all the tries and if the limit __fit_pars_randomization_max is reached just pick up the best
+        map<int, vector<double> > calibTriesMap;
+        vector<double> calibTriesProb;
+        vector<int> calibTriesStatus;
+        
+        // Proceed with the local fits
+        if ( totalNPoints > 0 ) {
+            
+            // Create an object with this points and perform a fit.  A TGraph.
+			g = new TGraphErrors(totalNPoints+1); //1 point for every peak expected + detector treshold
+
+            // Counter for points in TGraphErrors
+			int cntr = 0;
+            
+            if(m_verbose != __VER_QUIET) {            
+                cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
+            }/*else{
+                if (pix % 1000 == 0) cout<<endl<<"Processing pixel : "<<pix<<endl;
+            }    */
+
+            ProcessOneSource(m_allSources[sour_num], st, g, pix, cntr);          
+        }
+        
+        // Check if any of the sources had a fit status -1 := no data
+        vector<int> allstatus = st->peakFitStatus;
+        bool missingInfo = false;
+        if ( find(allstatus.begin(), allstatus.end(), -1) !=  allstatus.end() ) { // found -1
+            missingInfo = true;
+        }
+        
+//       //If all fits were good
+//       if( totalNPoints > 0 && !missingInfo ) {
+           
+//           // store points
+//           m_calibTOTPeaks[pix] = st->calibTOTPeaks;
+//           m_calibPoints[pix] = st->pointsSave;
+//           m_calibPointsSigmas[pix] = st->pointsSaveSigmas;
+//           m_calibPointsConstants[pix] = st->pointsSaveConstants;
+//           m_calibPoints_ia[pix] = st->pointsSave_ia;
+//           m_calibPoints_ib[pix] = st->pointsSave_ib;
+//           m_calibPoints_ic[pix] = st->pointsSave_ic;
+//           m_calibPoints_it[pix] = st->pointsSave_it;
+//       }
+       
+       pair<int, int> pix_xy = XtoXY(pix, __matrix_width);
+
+
+       /***************** Part mainly inspired from DrawFullPixelCalib ***************************
+        * (because I'm looking for stored spectra, fit results and kernel function)
+        */
+       
+       // - Get list of peaks identified (before the selection of peaks for fitting)
+       map<int, double> calibPoints = m_allSources[sour_num]->GetCalibHandler()->GetCalibPoints();
+       vector<double> peaks = (m_allSources[sour_num]->GetMaxPeaksIdentified())[pix];
+       
+       // - Points used in the fit
+       vector< pair<double, double> > calibFitPoints = GetCalibPoints(pix);
+       
+       // - Number of points
+       int nCalibPoints = (int)calibPoints.size();
+       
+       // Get kernel function for this pixel
+       TF1 * kf;
+       kf = m_allSources[sour_num]->GetKernelDensityFunction(pix);
+       
+       // Get fit results for this pixel
+       br_double_sigmafit.clear();
+       br_double_constantfit.clear();
+       br_double_totmeanfit.clear();
+       br_double_afit.clear();
+       br_double_bfit.clear();
+       br_double_cfit.clear();
+       br_double_tfit.clear();       
+
+       Int_t ncounts = 0;
+
+       if (!(st->pointsSaveSigmas.empty()) && !(st->pointsSaveConstants.empty()) ){ //check if at least one fit succeded
+
+           // Loop on all peaks, store fit results and select the one with highest amplitude
+           double selected_point_amplitude = 0.;
+           Int_t peak_for_histos = 0;
+           for(int p = 0 ; p < nCalibPoints ; p++) {
+
+               if (st->pointsSaveConstants.at(p)>selected_point_amplitude){
+                   selected_point_amplitude = st->pointsSaveConstants.at(p);
+                   peak_for_histos=p;
+               }
+
+               //Get the mean of the gaussian fit
+               pair<double, double> pair_Energy_TOTmeanfit = st->pointsSave.at(p);
+               br_double_sigmafit.push_back(st->pointsSaveSigmas.at(p));
+               br_double_constantfit.push_back(st->pointsSaveConstants.at(p));
+               br_double_totmeanfit.push_back(pair_Energy_TOTmeanfit.first);
+               br_double_afit.push_back(st->pointsSave_ia.at(p));
+               br_double_bfit.push_back(st->pointsSave_ib.at(p));
+               br_double_cfit.push_back(st->pointsSave_ic.at(p));
+               br_double_tfit.push_back(st->pointsSave_it.at(p));
+               
+           }
+
+           // Get the mean of the gaussian fit
+           pair<double, double> pair_Energy_TOTmeanfit = st->pointsSave.at(peak_for_histos);
+
+           // Fill maps with selected peak
+           SingleHitKernelTOTpeaks->Fill(pix_xy.first,pix_xy.second,st->calibTOTPeaks.at(peak_for_histos));
+           SingleHitFitMeans->Fill(pix_xy.first,pix_xy.second,pair_Energy_TOTmeanfit.second);
+           SingleHitFitSigmas->Fill(pix_xy.first,pix_xy.second,st->pointsSaveSigmas.at(peak_for_histos));
+           SingleHitFitConstants->Fill(pix_xy.first,pix_xy.second,st->pointsSaveConstants.at(peak_for_histos));
+
+           // Fill tree (and count map)
+           br_TH1_spectrum = this->GetHisto(pix, "SavePixelResolution");
+           ncounts = br_TH1_spectrum->Integral();
+           SingleHitCounts->Fill(pix_xy.first,pix_xy.second,ncounts);
+           br_int_pixID = pix;
+           br_int_selectedpeak_ID = peak_for_histos;
+           br_TF1_KernelFunction = kf;
+           tree->Fill();
+           delete br_TH1_spectrum;
+
+       // If fit did not succeed I still need to save the pixel (to keep
+       //equivalence between entry and pixel ID, and store its spectrum, counts, etc...)
+       }else{
+           // Write maps
+           SingleHitKernelTOTpeaks->Fill(pix_xy.first,pix_xy.second,0);
+           SingleHitFitMeans->Fill(pix_xy.first,pix_xy.second,0);
+           SingleHitFitSigmas->Fill(pix_xy.first,pix_xy.second,0);
+           SingleHitFitConstants->Fill(pix_xy.first,pix_xy.second,0);
+
+           // Fill tree (and count map)
+           br_TH1_spectrum = this->GetHisto(pix, "SavePixelResolution");
+           ncounts = br_TH1_spectrum->Integral();
+           SingleHitCounts->Fill(pix_xy.first,pix_xy.second,ncounts);
+           br_int_pixID = pix;
+           br_int_selectedpeak_ID = -1;
+           br_TF1_KernelFunction = kf;
+           tree->Fill();
+           delete br_TH1_spectrum;
+       }
+
+    }
+
+    // **************** Save everything *****************************
+    SingleHitKernelTOTpeaks->Write();
+    SingleHitFitMeans->Write();
+    SingleHitFitSigmas->Write();
+    SingleHitFitConstants->Write();
+    SingleHitCounts->Write();
+    tree->Write();
+    m_output_root_Thomas->Close();
+}
+
+
 TF1 * TOTCalib::FittingFunctionSelector(double /*E*/, TOTCalib * s, int pointIndex){
 
 	// Assume linear first
