@@ -213,6 +213,7 @@ public :
 	TF1 * CreateKernelDensityFunction(int, vector<double>, double);
 
 	void SetGlobalThresholdEnergyAndErr(double th, double th_err) { m_thresholdEnergy = th; m_thresholdEnergy_Err = th_err; };
+	pair<double, double> GetGlobalThresholdEnergyAndErr() {return make_pair(m_thresholdEnergy, m_thresholdEnergy_Err);};
 
 	void FillHisto(int, int);
 
@@ -277,7 +278,7 @@ public :
 		m_surrogateStatus = status;
 	};
 
-	void DumbSpectrumVectorFromSavedFile(	vector< vector<double> > spectrum){
+	void DumpSpectrumVectorFromSavedFile(	vector< vector<double> > spectrum){
 		m_calibhistos = spectrum;
 		m_nbins = (spectrum[0]).size();
 		m_histoRebinning = m_nbins;
@@ -310,6 +311,22 @@ public :
 		m_gf_lowe = new TF1("gf_lowe", fitfunc_lowen, 0., maxrange, __fitfunc_lowen_npars);
 		m_gf_lowe->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
 	}
+
+	int GetMatrixWidth(){return __matrix_width;};
+	int GetMatrixHeight(){return __matrix_height;};
+	int GetMatrixSize(){return __matrix_size;};
+	map<int, int> GetSurrogateStatusMap(){return m_surrogateStatus;};
+	map<int, vector<double> > GetSurrogateParamMap(){return m_calibSurrogateConstants;};
+	vector<TOTCalib *> GetSourcesVector(){return m_allSources;};
+
+	map<int, vector<double>> GetMapCalibPointsConstants(){return m_calibPointsConstants;};
+	map<int, vector< pair<double, double> > > GetMapCalibPoints(){return m_calibPoints;};
+	map<int, vector<double> > GetMapCalibSigmas(){return m_calibPointsSigmas;};
+	map<int, vector<double> > GetMapCalibIA(){return m_calibPoints_ia;};
+	map<int, vector<double> > GetMapCalibIB(){return m_calibPoints_ib;};
+	map<int, vector<double> > GetMapCalibIC(){return m_calibPoints_ic;};
+	map<int, vector<double> > GetMapCalibIT(){return m_calibPoints_it;};
+
 
 
 

@@ -15,5 +15,7 @@
 #pragma link C++ class map<int, vector< pair<double,double>>>;
 #pragma link C++ class map<int, vector<double>>;
 #pragma link C++ class map<int, double>;
+#pragma link C++ class vector<TOTCalib *>;
+#pragma link C++ class vector< pair<double, double> >;
 
 #endif
