@@ -13,6 +13,7 @@
  * root [] gStyle->SetPalette(52); // Easier to distinguish abnormal fits by eye with black & white picture.
  *
  * Inspired from exec2.C in root examples
+ * Warning: no cout here !
 */
 
 int XYtoX(int pixX, int pixY, int dimX){
@@ -81,6 +82,28 @@ void runExplorePixelTOTResolution()
     T->SetBranchAddress("Fitb",&br_double_bfit);
     T->SetBranchAddress("Fitc",&br_double_cfit);
     T->SetBranchAddress("Fitt",&br_double_tfit);
+    
+    
+    // ***************** NEW ******************************
+    
+    // In case calibrated data is present    
+    vector<double> *br_double_sigmafit_calibrated=0; 
+    vector<double> *br_double_totmeanfit_calibrated=0;
+    vector<double> *br_double_constantfit_calibrated=0;
+    TH1I *hpx_calibrated = 0;
+    
+    static TString invalidBranch("FitConstant_calibrated");
+    TObject* calib_branch = T->GetListOfBranches()->FindObject(invalidBranch);
+    bool calib_present = false;
+    if (calib_branch!=nullptr){ calib_present = true;}
+    //if (calib_present){
+        T->SetBranchAddress("Histo_Spectrum_calibrated",&hpx_calibrated);        
+        T->SetBranchAddress("FitConstant_calibrated",&br_double_constantfit_calibrated);
+        T->SetBranchAddress("FitMean_calibrated",&br_double_totmeanfit_calibrated);
+        T->SetBranchAddress("FitSigma_calibrated",&br_double_sigmafit_calibrated);         
+    //}
+    // ***************** NEW ******************************
+    
 
     T->GetEntry(0);
     Int_t FirstPixelInTree = pixelID;
@@ -125,7 +148,7 @@ void runExplorePixelTOTResolution()
     Int_t nevent = T->GetEntries();
     T->GetEntry(PixelToPlot-FirstPixelInTree); // I soustract firstPixelInTree for cases where root file starts with a pixelID different than 0.
 
-    // Firstly, draw histogram and kernel function  (stored in root file)
+    // First, draw histogram and kernel function  (stored in root file)
     hpx->Draw("HIST");
     kernel_func->Draw("same");
     kernel_func->SetLineColor(kBlack);
@@ -166,9 +189,42 @@ void runExplorePixelTOTResolution()
        }
 
     }
-
     c2->Update();
     padsav->cd();
+    
+    //-------------------------------------------------------------------------------
+    
+    if (calib_present){
+        
+        //create or set the new canvas c2
+        TVirtualPad *padsav2 = gPad;
+        TCanvas *c3 = (TCanvas*)gROOT->GetListOfCanvases()->FindObject("c3");
+        if(c3) delete c3->GetPrimitive("Projection");
+        else c3 = new TCanvas("c3");
+        c3->cd();
+    
+        // First, draw histogram and kernel function  (stored in root file)
+        hpx_calibrated->Draw("HIST");
+        
+        // Secondly, draw fit functions (from parameters stored in root file)
+        TF1 *fit_func_calibrated = new TF1("gf_linear", "gaus(0)", 0.,hpx->GetNbinsX());
+        Int_t number_of_fitted_peaks = br_double_constantfit_calibrated->size();
+        for(Int_t i=0 ; i<number_of_fitted_peaks ; i++ ) {
+    
+           fit_func_calibrated->SetParameter( 0, br_double_constantfit_calibrated->at(i) ); // I don't get the use of orderCntr in DrawFullPixelCalib
+           fit_func_calibrated->SetParameter( 1, br_double_totmeanfit_calibrated->at(i) );
+           fit_func_calibrated->SetParameter( 2, br_double_sigmafit_calibrated->at(i));
+           if (i==selectedPeakID) {
+               fit_func_calibrated->SetLineColor(kGreen);
+           }else{
+               fit_func_calibrated->SetLineColor(kRed);
+           }
+           fit_func_calibrated->DrawCopy("same");  
+        } 
+        
+        c3->Update();
+        padsav2->cd();
+    }
 
 }
 
