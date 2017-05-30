@@ -77,6 +77,9 @@ public:
 	void CalibIgnorePoint(int i){ m_calibPoints[i]*= -1; };
 	void CalibSetPointRegion(int i, int reg){ m_calibPointsRegion[i] = reg; }
 
+	void Set_m_calibPoints( map< int, double> p){ m_calibPoints = p;};
+	void Set_m_calibPointsRegion( map< int, int> r){ m_calibPointsRegion = r;};
+
 	enum {
 		__linear_reg = 0,
 		__lowenergy_reg,
@@ -210,6 +213,7 @@ public :
 	TF1 * CreateKernelDensityFunction(int, vector<double>, double);
 
 	void SetGlobalThresholdEnergyAndErr(double th, double th_err) { m_thresholdEnergy = th; m_thresholdEnergy_Err = th_err; };
+	pair<double, double> GetGlobalThresholdEnergyAndErr() {return make_pair(m_thresholdEnergy, m_thresholdEnergy_Err);};
 
 	void FillHisto(int, int);
 
@@ -248,6 +252,83 @@ public :
 
 	void CreateGlobalKernelAndGetCriticalPoints(); 
 
+	enum surr_status{ 	//surrogate function status
+		__no_data = -1, // no source has sufficient data, surrogate cannot be built
+		__partial_data, // one or many sources has insufficient data, but surrogate was built anyway (possible bad fit)
+		__good_data,  	// every peak of every source was identified and the results are probably reliable
+	};
+
+	void DumpCalibParametersFromSavedFile(	map<int, vector< pair<double, double> > > points,  
+											map<int, vector<double> > sig, 
+											map<int, vector<double> > consts,
+											map<int, vector<double> > ia,
+											map<int, vector<double> > ib,
+											map<int, vector<double> > ic,
+											map<int, vector<double> > it,
+											map<int, vector<double> > param,
+											map<int, int> status){
+		m_calibPoints = points;
+		m_calibPointsSigmas = sig;
+		m_calibPointsConstants = consts;
+		m_calibPoints_ia = ia;
+		m_calibPoints_ib = ib;
+		m_calibPoints_ic = ic;
+		m_calibPoints_it = it;
+		m_calibSurrogateConstants = param;
+		m_surrogateStatus = status;
+	};
+
+	void DumpSpectrumVectorFromSavedFile(	vector< vector<double> > spectrum){
+		m_calibhistos = spectrum;
+		m_nbins = (spectrum[0]).size();
+		m_histoRebinning = m_nbins;
+	};
+
+	void CreateCalibHandlerFromSavedFile( TString s){
+		m_calhandler = new CalibHandler(s.Data());
+	};
+
+	void DumpSourceInfoFromSavedFile(map<int, double> p, map<int, int> r, map<int, vector<double> > max){
+		m_calhandler->Set_m_calibPoints(p);
+		m_calhandler->Set_m_calibPointsRegion(r);
+		m_critPointsMax = max;
+	};
+
+	void AddSingleSourceFromSavedFile( TOTCalib * s){
+		m_allSources.push_back(s);
+	};
+
+	void CreateGausAndLowEnergFitFunction(){
+		vector<TOTCalib *>::iterator iir = m_allSources.begin();
+		double maxrange = 0.;
+		for ( ; iir != m_allSources.end() ; iir++ ) {
+			if( (*iir)->GetNBins() > maxrange ) maxrange = (double) ( (*iir)->GetNBins() );
+		}
+
+		m_gf_linear = new TF1("gf_linear", "gaus(0)", 0., maxrange);
+		m_gf_linear->SetParameters(1, 1, m_bandwidth);
+	
+		m_gf_lowe = new TF1("gf_lowe", fitfunc_lowen, 0., maxrange, __fitfunc_lowen_npars);
+		m_gf_lowe->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
+	}
+
+	int GetMatrixWidth(){return __matrix_width;};
+	int GetMatrixHeight(){return __matrix_height;};
+	int GetMatrixSize(){return __matrix_size;};
+	map<int, int> GetSurrogateStatusMap(){return m_surrogateStatus;};
+	map<int, vector<double> > GetSurrogateParamMap(){return m_calibSurrogateConstants;};
+	vector<TOTCalib *> GetSourcesVector(){return m_allSources;};
+
+	map<int, vector<double>> GetMapCalibPointsConstants(){return m_calibPointsConstants;};
+	map<int, vector< pair<double, double> > > GetMapCalibPoints(){return m_calibPoints;};
+	map<int, vector<double> > GetMapCalibSigmas(){return m_calibPointsSigmas;};
+	map<int, vector<double> > GetMapCalibIA(){return m_calibPoints_ia;};
+	map<int, vector<double> > GetMapCalibIB(){return m_calibPoints_ib;};
+	map<int, vector<double> > GetMapCalibIC(){return m_calibPoints_ic;};
+	map<int, vector<double> > GetMapCalibIT(){return m_calibPoints_it;};
+
+
+
 
 private:
 	//////////////////////////////////////////////////////////////////
@@ -263,6 +344,7 @@ private:
 	map<int, vector<double> > m_calibPoints_ib;
 	map<int, vector<double> > m_calibPoints_ic;
 	map<int, vector<double> > m_calibPoints_it;
+	map<int, int > m_surrogateStatus;
 
 	int m_nbins;
 	int m_histoRebinning;
@@ -339,6 +421,10 @@ private:
 	vector<double> m_globalhisto;	
 	vector<double> m_global_max; // Critical points of the whole map kernel
 	vector<double> m_global_min; //
+
+	TString	fp; // folder path (calib from image)
+	TString fn;	// file name (calib from image)
+	TString m_outputName; // output name
 };
 
 #endif
