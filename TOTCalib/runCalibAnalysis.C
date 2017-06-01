@@ -25,6 +25,18 @@ class TOTCalib;
 TOTCalib* calib;
 Int_t palette[4] = {kWhite, kRed, kBlue, kGreen}; // status color palette
 
+void LoadFile(TString);
+void DrawFullPixelCalib(int);
+void DrawFullPixelCalib(int,int);   
+void DrawSurrogate(int);
+void DrawSurrogate(int,int);
+void DrawStatusMap();    
+void DrawParameterMap(string);
+void DrawSpectrum(int,int,TString);    
+void DrawSpectrum(int,TString);        
+void DrawChiSquareMap();
+double surrogatefunc_cal(double*,double*);
+
 
 R__LOAD_LIBRARY(libTOTCalib.so);
 
@@ -36,7 +48,7 @@ void runCalibAnalysis (  ) {
 	int pix = 1000; // Work on this set of pixel
 	int x = 20; int y = 35;
 	
-	TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/macro_test.root";//
+    TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/macro_test.root";//
 	LoadFile(file);
 
 
@@ -66,23 +78,23 @@ void LoadFile(TString s){
 	TTree * tsurr = (TTree*) f->Get("surrogateFunction");
 	TTree * tparam =(TTree*) f->Get("parameters");
 
-	map<int, vector<double> > * surr_p;
-	map<int, int> *surr_status;
+	map<int, vector<double> > * surr_p = nullptr;
+	map<int, int> *surr_status = nullptr;
 	tsurr->SetBranchAddress("parameters", &surr_p);
 	tsurr->SetBranchAddress("status", &surr_status);
 	tsurr->GetEntry(0); // this TTree has a single entry
 
-	map<int, vector< pair<double, double> > > * points; //energy and mean
-	map<int, vector<double> > * sigmas;
-	map<int, vector<double> > * constants;
-	pair<double, double> * thres; //threshold + error
-	vector<TString> * sn ; //source name
+	map<int, vector< pair<double, double> > > * points = nullptr; //energy and mean
+	map<int, vector<double> > * sigmas = nullptr;
+	map<int, vector<double> > * constants = nullptr;
+	pair<double, double> * thres = nullptr; //threshold + error
+	vector<TString> * sn = nullptr; //source name
 
 	// low energy fit parameter
-	map<int, vector<double> > *calibPoints_ia;
-	map<int, vector<double> > *calibPoints_ib;
-	map<int, vector<double> > *calibPoints_ic;
-	map<int, vector<double> > *calibPoints_it;
+	map<int, vector<double> > *calibPoints_ia = nullptr;
+	map<int, vector<double> > *calibPoints_ib = nullptr;
+	map<int, vector<double> > *calibPoints_ic = nullptr;
+	map<int, vector<double> > *calibPoints_it = nullptr;
 
 	tparam->SetBranchAddress("energyAndGausMean", &points);
 	tparam->SetBranchAddress("gausSigma", &sigmas);
@@ -102,10 +114,10 @@ void LoadFile(TString s){
 	// Create sub-TOTCalib objects from TTrees
 	vector<TString>::iterator it;
 	TOTCalib * tempSource;
-	vector< vector<double> > * spectrum;
-	map<int, double> *CHpoints; // points defined in calib handler object
-	map<int, int> *CHregions; // regions defined in calib handler object
-	map<int, vector<double> > *max; // identified peaks (required by DrawFullPixelCalib)
+	vector< vector<double> > * spectrum = nullptr;
+	map<int, double> *CHpoints = nullptr; // points defined in calib handler object
+	map<int, int> *CHregions = nullptr; // regions defined in calib handler object
+	map<int, vector<double> > *max = nullptr; // identified peaks (required by DrawFullPixelCalib)
 	double bandwidth;
 
 	for (it = (*sn).begin(); it != (*sn).end(); it++){
