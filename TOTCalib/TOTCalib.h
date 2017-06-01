@@ -38,9 +38,9 @@ using namespace std;
 
 #define __npars_surrogate			    4
 #define __npars_lowe_fitfunc            7
-#define __min_tmathprobtest_val      0.90
-#define __max_fit_tries                100
-#define __fit_pars_randomization_max 1000
+#define __min_tmathprobtest_val      0.01
+#define __max_fit_tries                3
+#define __fit_pars_randomization_max 100
 #define __fit_pars_randomization_min   20
 
 #define __fraction_of_height_range_id 0.5
@@ -52,7 +52,7 @@ using namespace std;
 #define __lowen_para_hint 3.0 // useless if at least 2 fits in the linear region succeeds
 #define __lowen_parb_hint 80.0 // useless if at least 2 fits in the linear region succeeds
 #define __lowen_parc_hint 200.0
-#define __lowen_part_hint 0.0
+#define __lowen_part_hint 5.0
 #define __lowen_par_fraction_random 0.4 // range for randomization around the given hint (i.e. put 0.0 to set the hint without randomization) 
 
 // Prototypes
@@ -243,6 +243,7 @@ public :
 
 	vector<vector<double> > Get_m_histo(){return m_calibhistos;}; // each pixel has its own histogram
 	void SetGlobalHisto(vector<double> v){m_globalhisto=v;}; // every histogram are merged in this vector
+	vector<double> GetGlobalHisto(){return m_globalhisto;};
 
 	void SetGlobalCriticalPoints(vector<double> max, vector<double> min){ 
 		m_global_max=max;
@@ -276,6 +277,8 @@ public :
 		m_calibPoints_it = it;
 		m_calibSurrogateConstants = param;
 		m_surrogateStatus = status;
+		m_maxpix = status.rbegin()->first;
+		m_minpix = status.begin()->first;
 	};
 
 	void DumpSpectrumVectorFromSavedFile(	vector< vector<double> > spectrum){
@@ -327,6 +330,7 @@ public :
 	map<int, vector<double> > GetMapCalibIC(){return m_calibPoints_ic;};
 	map<int, vector<double> > GetMapCalibIT(){return m_calibPoints_it;};
 
+	void GetParametersEstimation();
 
 
 
@@ -425,6 +429,14 @@ private:
 	TString	fp; // folder path (calib from image)
 	TString fn;	// file name (calib from image)
 	TString m_outputName; // output name
+
+	pair<double, double> m_glob_const;
+	pair<double, double> m_glob_sig;
+	pair<double, double> m_glob_a;
+	pair<double, double> m_glob_b;
+	pair<double, double> m_glob_c;
+	pair<double, double> m_glob_t;
+
 };
 
 #endif

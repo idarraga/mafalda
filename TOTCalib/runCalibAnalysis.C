@@ -7,6 +7,7 @@
 #include <TString.h>
 #include <TROOT.h>
 #include <TSystem.h>
+#include "TObject.h"
 
 #include <vector>
 #include <string>
@@ -17,72 +18,47 @@
 #include <TFitResult.h>
 #include "TExec.h"
 
+R__LOAD_LIBRARY(libTOTCalib);
+
+
 using namespace std;
 
 class TOTCalib;
 
 // global
-TOTCalib* calib;
+TOTCalib * calib;
+TFile * f;
 Int_t palette[4] = {kWhite, kRed, kBlue, kGreen}; // status color palette
 
 
-R__LOAD_LIBRARY(libTOTCalib.so);
-
-void runCalibAnalysis (  ) {
-
-	// Load calibration library
-	gSystem->Load("libTOTCalib.so");
-
-	int pix = 1000; // Work on this set of pixel
-	int x = 20; int y = 35;
-	
-	TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/macro_test.root";//
-	LoadFile(file);
-
-
-	//DrawFullPixelCalib(pix);	// pixel ID
-	////DrawFullPixelCalib(x,y); 	// same, but (x,y)
-//
-	//DrawSpectrum(pix, "Am241"); // source can be modified
-	////DrawSpectrum(x,y, "Am241");
-//
-	//DrawSurrogate(pix);
-	////DrawSurrogate(x,y);
-//
-	DrawParameterMap("a");// use surrogate parameters a,b,c or t
-	DrawStatusMap();
-	DrawChiSquareMap();
-
-}
-
-
-void LoadFile(TString s){
+void LoadFile(TString file){
 
 	// We create an empty TOTCalib (source) object to inherit every variable and function from this class (eg DrawFullPixelCalib)
 	calib = new TOTCalib();
 
 	// Load ROOT file and link branches to variable
-	TFile * f = new TFile(s.Data());
-	TTree * tsurr = (TTree*) f->Get("surrogateFunction");
-	TTree * tparam =(TTree*) f->Get("parameters");
-
-	map<int, vector<double> > * surr_p;
-	map<int, int> *surr_status;
+	f = new TFile(file.Data());
+	TTree * tsurr = (TTree *) f->Get("surrogateFunction");
+	TTree * tparam =(TTree *) f->Get("parameters");
+	tsurr->GetEntry(0);
+	map< int, vector< double > > * surr_p = new map< int, vector< double > >;
+	map<int,int> * surr_status = new map<int,int>;
 	tsurr->SetBranchAddress("parameters", &surr_p);
 	tsurr->SetBranchAddress("status", &surr_status);
 	tsurr->GetEntry(0); // this TTree has a single entry
 
-	map<int, vector< pair<double, double> > > * points; //energy and mean
-	map<int, vector<double> > * sigmas;
-	map<int, vector<double> > * constants;
-	pair<double, double> * thres; //threshold + error
-	vector<TString> * sn ; //source name
+
+	map<int, vector< pair<double, double> > > * points = new map<int, vector< pair<double, double> > >; //energy and mean
+	map<int, vector<double> > * sigmas = new map<int, vector<double> >;
+	map<int, vector<double> > * constants = new map<int, vector<double> >;
+	pair<double, double> * thres = 0; //threshold + error
+	vector<TString> * sn = 0; //source name
 
 	// low energy fit parameter
-	map<int, vector<double> > *calibPoints_ia;
-	map<int, vector<double> > *calibPoints_ib;
-	map<int, vector<double> > *calibPoints_ic;
-	map<int, vector<double> > *calibPoints_it;
+	map<int, vector<double> > * calibPoints_ia = 0;
+	map<int, vector<double> > * calibPoints_ib = 0;
+	map<int, vector<double> > * calibPoints_ic = 0;
+	map<int, vector<double> > * calibPoints_it = 0;
 
 	tparam->SetBranchAddress("energyAndGausMean", &points);
 	tparam->SetBranchAddress("gausSigma", &sigmas);
@@ -95,18 +71,19 @@ void LoadFile(TString s){
 	tparam->SetBranchAddress("low_it", &calibPoints_it);
 
 	// Dump variables into calib
+	tparam->Print();
 	tparam->GetEntry(0); // this TTree has a single entry
 	calib-> DumpCalibParametersFromSavedFile(*points, *sigmas, *constants, *calibPoints_ia, *calibPoints_ib, *calibPoints_ic, *calibPoints_it, *surr_p, *surr_status);
 	calib-> SetGlobalThresholdEnergyAndErr((*thres).first, (*thres).second);
 	
 	// Create sub-TOTCalib objects from TTrees
 	vector<TString>::iterator it;
-	TOTCalib * tempSource;
-	vector< vector<double> > * spectrum;
-	map<int, double> *CHpoints; // points defined in calib handler object
-	map<int, int> *CHregions; // regions defined in calib handler object
-	map<int, vector<double> > *max; // identified peaks (required by DrawFullPixelCalib)
-	double bandwidth;
+	TOTCalib * tempSource =0 ;
+	vector< vector<double> > * spectrum =0 ;
+	map<int, double> * CHpoints = 0; // points defined in calib handler object
+	map<int, int> * CHregions = 0; // regions defined in calib handler object
+	map<int, vector<double> > * k_max = 0; // identified peaks (required by DrawFullPixelCalib)
+	double bandwidth = 0;
 
 	for (it = (*sn).begin(); it != (*sn).end(); it++){
 		TTree * tsour = (TTree*) f->Get( (*it).Data() );
@@ -115,14 +92,14 @@ void LoadFile(TString s){
 		tsour->SetBranchAddress("bandwidth", &bandwidth);
 		tsour->SetBranchAddress("regions", &CHregions);
 		tsour->SetBranchAddress("points", &CHpoints);
-		tsour->SetBranchAddress("maximums", &max);
+		tsour->SetBranchAddress("maximums", &k_max);
 		tsour -> GetEntry(0); // this TTree has a single entry
 
 		tempSource = new TOTCalib();
 		tempSource -> SetKernelBandWidth(bandwidth);
 		tempSource -> DumpSpectrumVectorFromSavedFile(*spectrum);
 		tempSource -> CreateCalibHandlerFromSavedFile( (*it) );
-		tempSource -> DumpSourceInfoFromSavedFile(*CHpoints, *CHregions, *max);
+		tempSource -> DumpSourceInfoFromSavedFile(*CHpoints, *CHregions, *k_max);
 
 		calib->AddSingleSourceFromSavedFile(tempSource);
 
@@ -139,9 +116,7 @@ void DrawFullPixelCalib(int x, int y){
 	calib->DrawFullPixelCalib(x, y);
 }
 
-void DrawSurrogate(int x, int y){
-	DrawSurrogate(calib->XYtoX(make_pair(x,y), calib->GetMatrixWidth()));
-}
+
 
 void DrawSurrogate(int pix){ // from DrawFullPixelCalib
 
@@ -199,11 +174,15 @@ void DrawSurrogate(int pix){ // from DrawFullPixelCalib
 		if ( i == 1 ) parS = "b = ";
 		if ( i == 2 ) parS = "c = ";
 		if ( i == 3 ) parS = "t = ";
-		parS += TString::Format("%.2f"/* +/- %.2f*/, s->GetParameter(i), s->GetParError(i) ); 	// error on fit parameters is not computed
+		parS += TString::Format("%.2f"/* +/- %.2f*/, s->GetParameter(i)/*, s->GetParError(i) */); 	// error on fit parameters is not computed
 		l2->DrawLatex(maxel_x/2, maxel_y * (1 - (i/10.)), parS); 
 	}
 
 	c1->Update();
+}
+
+void DrawSurrogate(int x, int y){
+	DrawSurrogate( calib->XYtoX(make_pair(x,y), calib->GetMatrixWidth()) );
 }
 
 void DrawStatusMap(){
@@ -294,10 +273,6 @@ void DrawParameterMap(string p){
 	h->Draw("colz same"); // must draw twice to set the right color palette
 }
 
-void DrawSpectrum(int x, int y, TString s){
-	DrawSpectrum( calib->XYtoX( make_pair(x,y), calib->GetMatrixWidth()) , s);
-}
-
 
 void DrawSpectrum(int pix, TString s){
 	bool source_identified = false;
@@ -367,7 +342,7 @@ void DrawSpectrum(int pix, TString s){
 	TF1 * gf; TF1 * gf_clone;
 
 	// Data
-	h = source->GetHisto(pix, "summary");
+	h = source->GetHisto(pix, "spectrum");
 	h->Draw("HIST");
 	h->GetXaxis()->SetTitle("TOT");
 	h->GetYaxis()->SetTitle("entries");
@@ -470,6 +445,9 @@ void DrawSpectrum(int pix, TString s){
 
 }
 
+void DrawSpectrum(int x, int y, TString s){
+	DrawSpectrum( calib->XYtoX( make_pair(x,y), calib->GetMatrixWidth()) , s);
+}
 
 void DrawChiSquareMap(){
 	TString cname = "ChiSquare_map";
@@ -495,7 +473,7 @@ void DrawChiSquareMap(){
 	vector<double> v;
 	for (pix = 0; pix < size; pix++){
 		pair<int, int> pix_xy = calib->XtoXY(pix, calib->GetMatrixWidth());
-		v = map[pix];
+		v = map[pix]; 
 		if (v.empty()){
 			h->SetBinContent(pix_xy.first+1, pix_xy.second+1, 0.);
 		} else {
@@ -504,7 +482,7 @@ void DrawChiSquareMap(){
 			TFitResultPtr fitr = g->Fit("surrogate", "NRSQ", ""); // not an actual fit since every parameter is fixed
 			h->SetBinContent(pix_xy.first+1, pix_xy.second+1, fitr.Get()->Chi2());
 		}
-
+		
 	}
 	c1->cd();
 
@@ -531,4 +509,116 @@ double surrogatefunc_calib(double * x, double * par) {
 	func -= ( c / ( xx - t) );
 
 	return func;
+}
+
+double fitfunc_lowen(double * x, double * par) {
+
+    // Function proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+
+    // independent var
+    Double_t xx = x[0]; // TOT
+
+    // parameters for gaussian
+    Double_t gconst = par[0];
+    Double_t mean = par[1];
+    Double_t sigma = par[2];
+
+    // surrogate ^ -1
+    Double_t a = par[3];
+    Double_t b = par[4];
+    Double_t c = par[5];
+    Double_t t = par[6];
+
+    // Inverse of the surrogate ( = energy in keV)
+    Double_t surrogate_inverse, delta, num1, num2, denum;
+    delta = TMath::Power((b-a*t-xx),2) - 4 * a * (xx*t-c-b*t);
+    num1 = a*t + xx - b;
+    num2 = TMath::Sqrt(delta) ;
+    denum = 2 * a;
+    surrogate_inverse = (num1 +  num2) / denum;
+
+    // Gaussian of the inversed surrogate
+    Double_t arg = (surrogate_inverse - mean)/sigma;
+    Double_t func = gconst * TMath::Exp(-0.5*arg*arg);
+
+    return func;
+}
+
+
+void DrawGlobalSpectrum(TString s){
+
+
+	bool source_identified = false;
+	TOTCalib * source;
+	TString name;
+
+	vector<TOTCalib*> sourVec = calib->GetSourcesVector();
+	int it; // iterator
+
+	int orderCntr = 0;
+	for( it = 0; it < sourVec.size(); it++){
+		name = (sourVec[it])->GetCalibHandler()->GetSourcename();
+		if (name == s){
+			source = sourVec[it];
+			source_identified = true;
+			break;
+		}
+	}
+
+	if(!source_identified){
+		cout << "[ERROR] Source " << s.Data() << " unrecognized. Sources in your file are:" << endl;
+		for(it = 0; it < sourVec.size(); it++){
+			cout << sourVec[it]->GetCalibHandler()->GetSourcename() << "   " ; }
+		cout << endl;
+		return;
+	}
+
+	TString cname = s + "_globalSpectrum";
+	TString ctitle = "Global Spectrum - "+s;
+	TCanvas * c1 = new TCanvas(cname, ctitle);
+
+	if(source->GetGlobalHisto().empty()) calib->CreateGlobalKernelAndGetCriticalPoints(); // global histo is only constructed once
+
+	vector<double> v = source->GetGlobalHisto();
+	vector<double>::iterator i;
+	TH1I * h = new TH1I(s+"_global", s+"_global", v.size(), 0, v.size());
+	int cntr = 0;
+	for(i = v.begin(); i!=v.end(); i++){
+		h->Fill(cntr, *i);
+		cntr++;
+	}
+	h->GetXaxis()->SetTitle("TOT");
+	h->GetYaxis()->SetTitle("entries");
+	h->Draw();
+
+}
+
+void runCalibAnalysis (  ) {
+
+	// Load calibration library
+	//gSystem->Load("libTOTCalib");
+
+	int pix = 1000; // Work on this set of pixel
+	int x = 20; int y = 35;
+	
+	TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/GaAs500.root";//
+	//TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/macro_test.root";//
+
+
+	LoadFile(file);
+
+
+	//DrawFullPixelCalib(pix);	// pixel ID
+	////DrawFullPixelCalib(x,y); 	// same, but (x,y)
+//
+	//DrawSpectrum(pix, "Am241"); // source can be modified
+	////DrawSpectrum(x,y, "Am241");
+//
+	//DrawSurrogate(pix);
+	////DrawSurrogate(x,y);
+//
+	//DrawParameterMap("a");// use surrogate parameters a,b,c or t
+	//DrawStatusMap();
+	//DrawChiSquareMap();
+
 }
