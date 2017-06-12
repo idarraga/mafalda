@@ -1439,8 +1439,8 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
             map<int, double>::iterator EpointItr = Epoint.begin();
         
             // The selected fitting function.  Do not delete in this scope !
-            TF1 * gf;
-            TF1 * gf_calibrated;
+            TF1 * gf = nullptr;
+            TF1 * gf_calibrated = nullptr;
         
             // Obtain the histogram for this pixel
             int totval = 0;
@@ -1453,8 +1453,8 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
 //            cout<<"t: "<<m_t[pix]<<endl;
 //            cout<<"--------"<<endl;
             
-            TH1I * hf;
-            TH1I * hf_calibrated;            
+            TH1I * hf = nullptr;
+            TH1I * hf_calibrated = nullptr;            
             
             // The data histogram
             hf = s->GetHisto(pix, "SavePixelResolution");
@@ -1565,7 +1565,7 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
        int nCalibPoints = (int)calibPoints.size();
        
        // Get kernel function for this pixel
-       TF1 * kf;
+       TF1 * kf = nullptr;
        kf = m_allSources[sour_num]->GetKernelDensityFunction(pix);
        
        // Get fit results for this pixel
@@ -1705,7 +1705,7 @@ TH1I * TOTCalib::GetHistoCalibrated(int pix, TString extraName, double energymax
 	name += pix;
     
     double rangemax = energymax*1.8;
-    double binsize = 0.1; // keV
+    double binsize = .2; // keV
     int nbins = rangemax/binsize;
 	TH1I * h = new TH1I(name, name, nbins, 0, rangemax);
 	vector<double> hist = m_calibhistos[pix];

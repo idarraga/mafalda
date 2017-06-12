@@ -58,6 +58,8 @@ double fit_func_lowen(double * x, double * par) {
 void runExplorePixelTOTResolution()
 {
 
+    //----------------------- Look for trees and branches in root file --------------------------------    
+    
     TTree *T = (TTree*)f.Get("SavePixelResolution");
     Int_t pixelID;
     TH1I *hpx = 0;
@@ -82,29 +84,27 @@ void runExplorePixelTOTResolution()
     T->SetBranchAddress("Fitb",&br_double_bfit);
     T->SetBranchAddress("Fitc",&br_double_cfit);
     T->SetBranchAddress("Fitt",&br_double_tfit);
-    
-    
-    // ***************** NEW ******************************
-    
+        
     // In case calibrated data is present    
     vector<double> *br_double_sigmafit_calibrated=0; 
     vector<double> *br_double_totmeanfit_calibrated=0;
     vector<double> *br_double_constantfit_calibrated=0;
-    TH1I *hpx_calibrated = 0;
-    
-    static TString invalidBranch("FitConstant_calibrated");
-    TObject* calib_branch = T->GetListOfBranches()->FindObject(invalidBranch);
+    TH1I *hpx_calibrated = 0;    
+    static TString calibBranch("FitConstant_calibrated");
+    TObject* calib_branch = T->GetListOfBranches()->FindObject(calibBranch);
     bool calib_present = false;
     if (calib_branch!=nullptr){ calib_present = true;}
-    //if (calib_present){
+    if (calib_present){
         T->SetBranchAddress("Histo_Spectrum_calibrated",&hpx_calibrated);        
         T->SetBranchAddress("FitConstant_calibrated",&br_double_constantfit_calibrated);
         T->SetBranchAddress("FitMean_calibrated",&br_double_totmeanfit_calibrated);
         T->SetBranchAddress("FitSigma_calibrated",&br_double_sigmafit_calibrated);         
-    //}
-    // ***************** NEW ******************************
+    }  
     
 
+    //------------------------------ Plot interactive histograms ----------------------------------------
+    
+    
     T->GetEntry(0);
     Int_t FirstPixelInTree = pixelID;
 
@@ -132,8 +132,7 @@ void runExplorePixelTOTResolution()
     //create or set the new canvas c2
     TVirtualPad *padsav = gPad;
     TCanvas *c2 = (TCanvas*)gROOT->GetListOfCanvases()->FindObject("c2");
-    if(c2) delete c2->GetPrimitive("Projection");
-    else   c2 = new TCanvas("c2");
+    if(c2) {delete c2->GetPrimitive("Projection");} else {c2 = new TCanvas("c2");}
     c2->cd();
 
     //draw slice corresponding to mouse position
@@ -149,6 +148,8 @@ void runExplorePixelTOTResolution()
     T->GetEntry(PixelToPlot-FirstPixelInTree); // I soustract firstPixelInTree for cases where root file starts with a pixelID different than 0.
 
     // First, draw histogram and kernel function  (stored in root file)
+    hpx->GetXaxis()->SetTitle("TOT");
+    hpx->GetXaxis()->SetTitle("Counts");    
     hpx->Draw("HIST");
     kernel_func->Draw("same");
     kernel_func->SetLineColor(kBlack);
@@ -192,7 +193,8 @@ void runExplorePixelTOTResolution()
     c2->Update();
     padsav->cd();
     
-    //-------------------------------------------------------------------------------
+    
+    //------------------- Add another canvas if calibrated data is present in root file ---------------------------------
     
     if (calib_present){
         
@@ -204,6 +206,8 @@ void runExplorePixelTOTResolution()
         c3->cd();
     
         // First, draw histogram and kernel function  (stored in root file)
+        hpx_calibrated->GetXaxis()->SetTitle("Energy (keV)");
+        hpx_calibrated->GetXaxis()->SetTitle("Counts"); 
         hpx_calibrated->Draw("HIST");
         
         // Secondly, draw fit functions (from parameters stored in root file)

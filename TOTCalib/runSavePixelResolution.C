@@ -37,13 +37,16 @@ void runSavePixelResolution() {
     pCu->SetKernelBandWidth(20.); // Kernel Bandwidth
     pCu->Loop(); // Run this source
     
-    TString calib_folder = "/Users/thomasbilloud/workspace/DETECTEURS/2017_02_GaAs500_E06W0203/calib/2017_04_27_AmCdCu/";
-    TString a = calib_folder+"TestGaAs500_a.txt";
-    TString b = calib_folder+"TestGaAs500_b.txt";
-    TString c = calib_folder+"TestGaAs500_c.txt";
-    TString t = calib_folder+"TestGaAs500_t.txt";
+    // Without calibration
+     pCu->SavePixelResolution();  
     
-    pCu->SavePixelResolution(a,b,c,t);    
+    // With calibration
+//    TString calib_folder = "/Users/thomasbilloud/workspace/DETECTEURS/2017_02_GaAs500_E06W0203/calib/2017_04_27_AmCdCu/";
+//    TString a = calib_folder+"TestGaAs500_a.txt";
+//    TString b = calib_folder+"TestGaAs500_b.txt";
+//    TString c = calib_folder+"TestGaAs500_c.txt";
+//    TString t = calib_folder+"TestGaAs500_t.txt";
+//    pCu->SavePixelResolution(a,b,c,t);    
 
 
 }
