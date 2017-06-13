@@ -1522,36 +1522,58 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
                                     
                 gf = FittingFunctionSelector( (*i).first, s , calibPointIterator );
                 
-                if(m_verbose == __VER_DEBUG) cout << " [ fit func --> " << gf->GetName() << "] ";
-                                  
-                if ( TString(gf->GetName()).Contains("gf_lowe") ){
-                    status = PeakFit(s, pix, totval, gf, hf,st, (*i).first);
-                }else{
-                    status = PeakFit(s, pix, totval, gf, hf,st);
+                if (totval >=0){
+                    
+                    if(m_verbose == __VER_DEBUG) cout << " [ fit func --> " << gf->GetName() << "] ";
+                                      
+                    if ( TString(gf->GetName()).Contains("gf_lowe") ){
+                        status = PeakFit(s, pix, totval, gf, hf,st, (*i).first);
+                    }else{
+                        status = PeakFit(s, pix, totval, gf, hf,st);
+                    }
+                    
+                    //Double_t func_TOTatMax = gf->GetMaximumX();   
+                    totmeanfit = gf->GetParameter(1);
+                    constantfit = gf->GetParameter(0);
+                    sigmafit = TMath::Abs ( gf->GetParameter(2) ); 
+    
+                    if( TString(gf->GetName()).Contains("gf_lowe") ) {  // in this case store the extra params
+                       st->pointsSave_ia.push_back( gf->GetParameter(3) );
+                       st->pointsSave_ib.push_back( gf->GetParameter(4) );
+                       st->pointsSave_ic.push_back( gf->GetParameter(5) );
+                       st->pointsSave_it.push_back( gf->GetParameter(6) );
+                    } else {
+                       st->pointsSave_ia.push_back( 0. );
+                       st->pointsSave_ib.push_back( 0. );
+                       st->pointsSave_ic.push_back( 0. );
+                       st->pointsSave_it.push_back( 0. );
+                    } 
+                    
+                } else {
+                    
+                    totmeanfit = -1;
+                    constantfit = -1;
+                    sigmafit = -1;
+                    status = -1; //will still try to fit the surrogate w/o this source (unless they all have -1 status)
+                    if( TString(gf->GetName()).Contains("gf_lowe") ) {  // in this case store the extra params
+                        st->pointsSave_ia.push_back( -1.);
+                        st->pointsSave_ib.push_back( -1.);
+                        st->pointsSave_ic.push_back( -1.);
+                        st->pointsSave_it.push_back( -1.);
+                    } else {
+                        st->pointsSave_ia.push_back( 0. );
+                        st->pointsSave_ib.push_back( 0. );
+                        st->pointsSave_ic.push_back( 0. );
+                        st->pointsSave_it.push_back( 0. );
+                    }
                 }
                 
-                //Double_t func_TOTatMax = gf->GetMaximumX();   
-                totmeanfit = gf->GetParameter(1);
 
-                if( TString(gf->GetName()).Contains("gf_lowe") ) {  // in this case store the extra params
-                   st->pointsSave.push_back( make_pair( (*EpointItr).second, totmeanfit ) ); // func_TOTatMax           
-                   st->pointsSave_ia.push_back( gf->GetParameter(3) );
-                   st->pointsSave_ib.push_back( gf->GetParameter(4) );
-                   st->pointsSave_ic.push_back( gf->GetParameter(5) );
-                   st->pointsSave_it.push_back( gf->GetParameter(6) );
-                } else {
-                   st->pointsSave.push_back( make_pair( (*EpointItr).second, totmeanfit ) );  // The mean of the fit             
-                   st->pointsSave_ia.push_back( 0. );
-                   st->pointsSave_ib.push_back( 0. );
-                   st->pointsSave_ic.push_back( 0. );
-                   st->pointsSave_it.push_back( 0. );
-                } 
                         
                 //if(m_verbose == __VER_DEBUG) cout << " { status : " << status << " } ";
                 
-                // These are the points for the surrogate function fit
-                constantfit = gf->GetParameter(0);
-                sigmafit = TMath::Abs ( gf->GetParameter(2) );       
+                // These are the points for the surrogate function fit      
+                st->pointsSave.push_back( make_pair( (*EpointItr).second, totmeanfit ) ); // func_TOTatMax                           
                 st->pointsSaveSigmas.push_back( sigmafit );                       // The sigma of the fit
                 st->pointsSaveConstants.push_back( constantfit );                 // The constant of the fit
                 st->calibTOTPeaks.push_back( totval );                            // The original TOT val where the fit starts
@@ -2199,7 +2221,7 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 	// Also is there is less peaks identified than calibration points
 	//  this pixel can not be processed.
 	if( peaks.empty() || peaks.size() < calibPoints.size() ) { //JS 23/03/17
-		cout << "[WARNING] Not enough peaks where identified for pixel " << pix << " and source "<< s->GetCalibHandler()->GetSourcename() <<endl; 
+		cout << "[WARNING] Not enough peaks were identified for pixel " << pix << " and source "<< s->GetCalibHandler()->GetSourcename() <<endl; 
 		cout << "          Setting all peaks to -1." << endl;
 		for (int k = 0; k < (int)calibPoints.size(); k++){
 			points.push_back(
