@@ -38,9 +38,9 @@ using namespace std;
 
 #define __npars_surrogate			    4
 #define __npars_lowe_fitfunc            7
-#define __min_tmathprobtest_val      0.01
-#define __max_fit_tries                3
-#define __fit_pars_randomization_max 100
+#define __min_tmathprobtest_val      0.90
+#define __max_fit_tries               100
+#define __fit_pars_randomization_max 1000
 #define __fit_pars_randomization_min   20
 
 #define __fraction_of_height_range_id 0.5
@@ -52,7 +52,7 @@ using namespace std;
 #define __lowen_para_hint 3.0 // useless if at least 2 fits in the linear region succeeds
 #define __lowen_parb_hint 80.0 // useless if at least 2 fits in the linear region succeeds
 #define __lowen_parc_hint 200.0
-#define __lowen_part_hint 5.0
+#define __lowen_part_hint 2.0
 #define __lowen_par_fraction_random 0.4 // range for randomization around the given hint (i.e. put 0.0 to set the hint without randomization) 
 
 // Prototypes
@@ -60,7 +60,10 @@ double GausFuncAdd(double * x, double * par);
 void printProgBar( int );
 #define __fitfunc_lowen_npars  7
 double fitfunc_lowen(double * x, double * par);
+double fitfunc_lowen_ZERO(double * x, double * par);
 double surrogatefunc_calib(double * x, double * par);
+double surrogatefunc_calib_ZERO(double * x, double * par);
+
 
 // Calibration Handler for each source
 class CalibHandler {
@@ -93,8 +96,6 @@ private:
 	map<int, double> m_calibPoints; // key: peak number in the source's histogram, value: energy of the peak (as defined in CalibHandler constructor) 
 	map<int, int> m_calibPointsRegion;
 	string m_sourceName;
-
-
 };
 
 
@@ -123,18 +124,24 @@ public :
 
 	//TTree * m_tree;
 
-    // Methods for calibration
+    // Methods for peak selection/fitting
     enum {
-        __standard = 0,
-        __lowStats,        
-        __jakubek // Method proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+        __peakStandard = 0,
+        __peakLowStats 	// Fit range and gaussian mean are fixed, better peak selection
     };
 
-	TOTCalib();   
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method = __standard);
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *, int method = __standard);
+    // Methods for calibration/surrogate fitting
+    enum {
+    	__calibStandard = 0,
+    	__calibJakubek, // Method proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+    	__calibJakubekAlt // Alternate method, use new parametrization of the surrogate
+	};
 
-	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method = __standard);
+	TOTCalib();   
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int peakMethod = __peakStandard);
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *, int peakMethod = __peakStandard);
+
+	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int peakMethod = __peakStandard);
 
 	virtual ~TOTCalib();
 	virtual Int_t    Cut(Long64_t entry);
@@ -239,7 +246,10 @@ public :
 	void IgnorePoint(int i){ m_calhandler->CalibIgnorePoint(i); };
 	void SetPointRegion(int i, int reg){ m_calhandler->CalibSetPointRegion(i,reg); };
 
-	int GetCalibMethod() { return m_method; };
+	int GetPeakMethod() {return m_peakMethod; };
+	int GetCalibMethod() { return m_calMethod; };
+	void SetPeakMethod(int m) {m_peakMethod = m; };
+	void SetCalibMethod(int m) {m_calMethod = m; };
 
 	vector<vector<double> > Get_m_histo(){return m_calibhistos;}; // each pixel has its own histogram
 	void SetGlobalHisto(vector<double> v){m_globalhisto=v;}; // every histogram are merged in this vector
@@ -267,7 +277,8 @@ public :
 											map<int, vector<double> > ic,
 											map<int, vector<double> > it,
 											map<int, vector<double> > param,
-											map<int, int> status){
+											map<int, int> status,
+											int calibMethod){
 		m_calibPoints = points;
 		m_calibPointsSigmas = sig;
 		m_calibPointsConstants = consts;
@@ -279,6 +290,7 @@ public :
 		m_surrogateStatus = status;
 		m_maxpix = status.rbegin()->first;
 		m_minpix = status.begin()->first;
+		m_calMethod = calibMethod;
 	};
 
 	void DumpSpectrumVectorFromSavedFile(	vector< vector<double> > spectrum){
@@ -291,10 +303,11 @@ public :
 		m_calhandler = new CalibHandler(s.Data());
 	};
 
-	void DumpSourceInfoFromSavedFile(map<int, double> p, map<int, int> r, map<int, vector<double> > max){
+	void DumpSourceInfoFromSavedFile(map<int, double> p, map<int, int> r, map<int, vector<double> > max, int peakMethod){
 		m_calhandler->Set_m_calibPoints(p);
 		m_calhandler->Set_m_calibPointsRegion(r);
 		m_critPointsMax = max;
+		m_peakMethod = peakMethod;
 	};
 
 	void AddSingleSourceFromSavedFile( TOTCalib * s){
@@ -313,6 +326,9 @@ public :
 	
 		m_gf_lowe = new TF1("gf_lowe", fitfunc_lowen, 0., maxrange, __fitfunc_lowen_npars);
 		m_gf_lowe->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
+
+		m_gf_lowe_ZERO = new TF1("gf_lowe_ZERO", fitfunc_lowen_ZERO, 0., maxrange, __fitfunc_lowen_npars);
+		m_gf_lowe_ZERO->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
 	}
 
 	int GetMatrixWidth(){return __matrix_width;};
@@ -330,9 +346,30 @@ public :
 	map<int, vector<double> > GetMapCalibIC(){return m_calibPoints_ic;};
 	map<int, vector<double> > GetMapCalibIT(){return m_calibPoints_it;};
 
-	void GetParametersEstimation();
+	void ParametersEstimation(int);
+	bool GetParametersEstimationStatus(){return globalEstimationSuccess;};
+	void SetThresholdBound(double e0){m_e0_bound = e0;};
+
+	vector<double> GetParametersEstimation(){ 
+		vector <double> v;   v.push_back(m_glob_const.first);   v.push_back(m_glob_sig.first);   v.push_back(m_glob_a.first);
+		v.push_back(m_glob_b.first);   v.push_back(m_glob_c.first);   v.push_back(m_glob_t.first); v.push_back(m_glob_e0.first);    return v; };
+
+	vector<double> GetParametersEstimationErrors(){ 
+		vector <double> v;   v.push_back(m_glob_const.second);   v.push_back(m_glob_sig.second);   v.push_back(m_glob_a.second);
+		v.push_back(m_glob_b.second);   v.push_back(m_glob_c.second);   v.push_back(m_glob_t.second); v.push_back(m_glob_e0.second);    return v; };
+
+	void DumpParametersEstimation(vector< double> v, vector<double> verr){
+		m_glob_const.first = v[0]; m_glob_const.second = verr[0];
+		m_glob_sig.first = v[1]; m_glob_sig.second = verr[1];
+		m_glob_a.first = v[2]; m_glob_a.second = verr[2];
+		m_glob_b.first = v[3]; m_glob_b.second = verr[3];
+		m_glob_c.first = v[4]; m_glob_c.second = verr[4];
+		m_glob_t.first = v[5]; m_glob_t.second = verr[5];
+		m_glob_e0.first = v[6]; m_glob_e0.second = verr[6];
+		globalEstimationSuccess = true; };
 
 
+	
 
 private:
 	//////////////////////////////////////////////////////////////////
@@ -409,6 +446,7 @@ private:
 	// Functions for fitting peaks in the data
 	TF1 * m_gf_linear;
 	TF1 * m_gf_lowe;
+	TF1 * m_gf_lowe_ZERO;
 	vector<TF1 * > m_extra_tf1_to_erase;
 
 	// Randon generators
@@ -420,7 +458,8 @@ private:
 	int __matrix_height;
 	int __matrix_width;
 
-	int m_method; //calibration method
+	int m_peakMethod; // peak fit method
+	int m_calMethod ; // calibration method
 
 	vector<double> m_globalhisto;	
 	vector<double> m_global_max; // Critical points of the whole map kernel
@@ -430,12 +469,15 @@ private:
 	TString fn;	// file name (calib from image)
 	TString m_outputName; // output name
 
+	bool globalEstimationSuccess;
 	pair<double, double> m_glob_const;
 	pair<double, double> m_glob_sig;
 	pair<double, double> m_glob_a;
 	pair<double, double> m_glob_b;
 	pair<double, double> m_glob_c;
 	pair<double, double> m_glob_t;
+	double m_e0_bound = 0.;
+	pair<double, double> m_glob_e0;
 
 };
 
