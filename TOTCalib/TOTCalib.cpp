@@ -749,15 +749,15 @@ void TOTCalib::CreateGlobalKernelAndGetCriticalPoints(){
 
 
 	//Create histogram (a vector, not a TH1) for the global spectrum of each source (whole map, not single pixels)
+	if (m_verbose !=__VER_QUIET) {
+            cout << "[INFO]	Gathering critical points for the whole pixel selection " << endl;
+        }
 	vector<TOTCalib *>::iterator itr = m_allSources.begin();
 	for ( ; itr!=m_allSources.end() ; itr++){
 		
-		int method = (*itr)->GetCalibMethod();
-		if (method != __lowStats) continue;
-
-		if (m_verbose !=__VER_QUIET) {
-            cout << "[INFO]	Gathering critical points for the whole pixel selection " << endl;
-        }
+		//int method = (*itr)->GetCalibMethod();
+		//if (method != __lowStats) continue;
+		
 		int nbins = (*itr)->GetNBins();
 
         vector<vector<double> > m_histo = (*itr)->Get_m_histo();
@@ -941,6 +941,9 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 
 	m_gf_lowe = new TF1("gf_lowe", fitfunc_lowen, 0., maxrange, __fitfunc_lowen_npars);
 	m_gf_lowe->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
+
+	m_gf_lowe_ZERO = new TF1("gf_lowe_ZERO", fitfunc_lowen_ZERO, 0., maxrange, __fitfunc_lowen_npars);
+	m_gf_lowe_ZERO->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
 
 	double percentage = 0.;
 	// iterate over pixels
@@ -1955,7 +1958,7 @@ TF1 * TOTCalib::FittingFunctionSelector(double /*E*/, TOTCalib * s, int pointInd
 	// Pull out the calibration handler and check if a different funcion is needed
 	CalibHandler * ch = s->GetCalibHandler();
 	map<int, int> regions = ch->GetCalibPointsRegion();
-	if ( regions[pointIndex] == CalibHandler::__lowenergy_reg ) g = m_gf_lowe;
+	if ( regions[pointIndex] == CalibHandler::__lowenergy_reg ) g = m_gf_lowe_ZERO; // new parametrization fully replaces previous method
 
 	//cout << "[" << pointIndex << "] " << regions[pointIndex] << endl;
 
@@ -2081,17 +2084,39 @@ TH1F * TOTCalib::CreateParameterHistogram(vector<double> v, TString name){
 // Uses the information from the previously fitted surrogate func "[0]*x + [1] - ([2]/(x - [3]))"
 TF1 * TOTCalib::GetSurrogateFunction(int pix) {
 
+	//first check which parametrization was used (standard or low energy)
+	vector<TOTCalib *>::iterator i = m_allSources.begin();
+	map<int, int>::iterator reg_i;
+	bool e0_parametrization = false;
+	for( ; i != m_allSources.end() ; i++ ) {
+		map<int, int> reg = (*i)->GetCalibHandler()->GetCalibPointsRegion();
+		reg_i = reg.begin();
+		for ( ; reg_i != reg.end() ; reg_i++ ) {
+            if( (*reg_i).second == CalibHandler::__lowenergy_reg ){
+            	e0_parametrization = true;
+            	break;
+            }
+		}
+	}
+
+
 	vector<double> vc = m_calibSurrogateConstants[pix];
 
 	if( vc.empty() ) return 0x0;
-
-	cout << "Request of surrogate function for pixel " << pix << " with parameters : "
-			<< vc[0] << ", " << vc[1] << ", " << vc[2] << ", " << vc[3] << endl;
-
 	TString fn = "surr_pix_";
 	fn += pix;
-	TF1 * surr = new TF1(fn, "[0]*x + [1] - ([2]/(x - [3]))", 0., 100.); // range in keV
-	surr->SetParameters(vc[0], vc[1], vc[2], vc[3]);
+	TF1 * surr = new TF1(fn, "[0]*x + [1] - ([2]/(x - [3]))", 0., 100.); // range in keV // FIX 
+
+	if (e0_parametrization){
+		cout << "Request of surrogate function for pixel " << pix << " with parameters (treshold parametrization) : "
+			<< vc[0] << ", " << vc[1] << ", " << vc[2] << ", " << vc[3] << endl;
+			// vc[2] is the treshold, not the c parameter
+			surr->SetParameters(vc[0], vc[1], (vc[0]*vc[2]+vc[1]) * (vc[2]-vc[3]) , vc[3]);
+	} else {
+		cout << "Request of surrogate function for pixel " << pix << " with parameters (standard parametrization) : "
+			<< vc[0] << ", " << vc[1] << ", " << vc[2] << ", " << vc[3] << endl;
+			surr->SetParameters(vc[0], vc[1], vc[2] , vc[3]);
+	}
 
 	return surr;
 }
@@ -2562,8 +2587,13 @@ TH1I * TOTCalib::GetHisto(int pix, TString extraName){
 
 	int cntr = 0;
 	for ( ; i != hist.end() ; i++) {
-		h->Fill(cntr, *i);
+		h->SetBinContent(h->FindBin(cntr), *i);
 		cntr++;
+	}
+
+	map<int, int> reg = m_calhandler->GetCalibPointsRegion();
+	for(unsigned int j=0; j < reg.size(); j++){
+		if (reg[j]==CalibHandler::__lowenergy_reg){h->Rebin(2, ""); break;}
 	}
 
 	return h;
@@ -3168,10 +3198,12 @@ TGraphErrors * TOTCalib::GetCalibGraph(int pix){
 
 		}
 	}
-
-	g->SetPoint( cntr, m_thresholdEnergy, 0.0 );
-	g->SetPointError(cntr, m_thresholdEnergy_Err, 0.0 );
-
+	
+	if (m_thresholdEnergy > 0.){ // will be 0 for jakubek calibration method
+		g->SetPoint( cntr, m_thresholdEnergy, 0.0 );
+		g->SetPointError(cntr, m_thresholdEnergy_Err, 0.0 );
+	}
+	
 	return g;
 }
 
@@ -3377,6 +3409,65 @@ double fitfunc_lowen(double * x, double * par) {
     Double_t c = par[5];
     Double_t t = par[6];
 
+    // Inverse of the surrogate ( = energy in keV)
+    Double_t surrogate_inverse, delta, num1, num2, denum;
+    delta = TMath::Power((b-a*t-xx),2) - 4 * a * (xx*t-c-b*t);
+    num1 = a*t + xx - b;
+    num2 = TMath::Sqrt(delta) ;
+    denum = 2 * a;
+    surrogate_inverse = (num1 +  num2) / denum;
+
+    // Gaussian of the inversed surrogate
+    Double_t arg = (surrogate_inverse - mean)/sigma;
+    Double_t func = gconst * TMath::Exp(-0.5*arg*arg);
+
+    return func;
+}
+
+double surrogatefunc_calib_ZERO(double * x, double * par) {
+	 // New parametrization -> Use the threshold as a parameter (instead of c)
+
+	// independent var
+	double xx = x[0];
+
+	// pars
+	double a = par[0];
+	double b = par[1];
+	double e0 = par[2];
+	double t = par[3];
+
+	if (t >= e0) return -1.0e6; // divergent point must be lower than pixel's threshold
+
+	double c = (a*e0+b)*(e0-t);
+
+	double func = a * xx + b;
+	func -= ( c / ( xx - t) );
+
+	return func;
+}
+
+double fitfunc_lowen_ZERO(double * x, double * par) {
+
+    // Function proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+    // New parametrization -> Use the threshold as a parameter (instead of c)
+
+    // independent var
+    Double_t xx = x[0]; // TOT
+
+    // parameters for gaussian
+    Double_t gconst = par[0];
+    Double_t mean = par[1];
+    Double_t sigma = par[2];
+
+    // surrogate ^ -1
+    Double_t a = par[3];
+    Double_t b = par[4];
+    Double_t e0 = par[5];
+    Double_t t = par[6];
+
+    if (t >= e0) return -1.0e6; // divergent point must be lower than pixel's threshold
+
+    Double_t c = (a*e0+b)*(e0-t);
     // Inverse of the surrogate ( = energy in keV)
     Double_t surrogate_inverse, delta, num1, num2, denum;
     delta = TMath::Power((b-a*t-xx),2) - 4 * a * (xx*t-c-b*t);

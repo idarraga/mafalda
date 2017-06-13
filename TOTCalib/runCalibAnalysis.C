@@ -1,6 +1,7 @@
 /**
  *  Author: Jean-Samuel Roux <roux@lps.umontreal.ca>
  *  Load calibration root file for analysis and validation
+ *  Best if you run it interactively in CINT/CLING
  */
 
 #include <TH2I.h>
@@ -36,6 +37,10 @@ void DrawSpectrum(int,int,TString);
 void DrawSpectrum(int,TString);        
 void DrawChiSquareMap();
 double surrogatefunc_cal(double*,double*);
+double surrogatefunc_calib_ZERO(double *, double *);  // New parametrization
+double fitfunc_lowen(double *, double *);
+double fitfunc_lowen_ZERO(double *, double *);  	  // New parametrization
+void DrawGlobalSpectrum(TString);
 
 
 R__LOAD_LIBRARY(libTOTCalib.so);
@@ -48,7 +53,7 @@ void runCalibAnalysis (  ) {
 	int pix = 1000; // Work on this set of pixel
 	int x = 20; int y = 35;
 	
-    TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/macro_test.root";//
+    TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/GaAs500_3.root";//
 	LoadFile(file);
 
 
@@ -61,9 +66,9 @@ void runCalibAnalysis (  ) {
 	//DrawSurrogate(pix);
 	////DrawSurrogate(x,y);
 //
-	DrawParameterMap("a");// use surrogate parameters a,b,c or t
-	DrawStatusMap();
-	DrawChiSquareMap();
+	//DrawParameterMap("a");// use surrogate parameters a,b,c or t
+	//DrawStatusMap();
+	//DrawChiSquareMap();
 
 }
 
@@ -211,7 +216,7 @@ void DrawSurrogate(int pix){ // from DrawFullPixelCalib
 		if ( i == 1 ) parS = "b = ";
 		if ( i == 2 ) parS = "c = ";
 		if ( i == 3 ) parS = "t = ";
-		parS += TString::Format("%.2f"/* +/- %.2f*/, s->GetParameter(i), s->GetParError(i) ); 	// error on fit parameters is not computed
+		parS += TString::Format("%.2f"/* +/- %.2f*/, s->GetParameter(i)/*, s->GetParError(i) */); 	// error on fit parameters is not computed
 		l2->DrawLatex(maxel_x/2, maxel_y * (1 - (i/10.)), parS); 
 	}
 
@@ -544,3 +549,145 @@ double surrogatefunc_calib(double * x, double * par) {
 
 	return func;
 }
+
+
+double surrogatefunc_calib_ZERO(double * x, double * par) {
+	 // New parametrization -> Use the threshold as a parameter (instead of c)
+
+	// independent var
+	double xx = x[0];
+
+	// pars
+	double a = par[0];
+	double b = par[1];
+	double e0 = par[2];
+	double t = par[3];
+
+	if (t >= e0) return -1.0e6; // divergent point must be lower than pixel's threshold
+
+	double c = (a*e0+b)*(e0-t);
+
+	double func = a * xx + b;
+	func -= ( c / ( xx - t) );
+
+	return func;
+}
+
+double fitfunc_lowen_ZERO(double * x, double * par) {
+
+    // Function proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+    // New parametrization -> Use the threshold as a parameter (instead of c)
+
+    // independent var
+    Double_t xx = x[0]; // TOT
+
+    // parameters for gaussian
+    Double_t gconst = par[0];
+    Double_t mean = par[1];
+    Double_t sigma = par[2];
+
+    // surrogate ^ -1
+    Double_t a = par[3];
+    Double_t b = par[4];
+    Double_t e0 = par[5];
+    Double_t t = par[6];
+
+    if (t >= e0) return -1.0e6; // divergent point must be lower than pixel's threshold
+
+    Double_t c = (a*e0+b)*(e0-t);
+    // Inverse of the surrogate ( = energy in keV)
+    Double_t surrogate_inverse, delta, num1, num2, denum;
+    delta = TMath::Power((b-a*t-xx),2) - 4 * a * (xx*t-c-b*t);
+    num1 = a*t + xx - b;
+    num2 = TMath::Sqrt(delta) ;
+    denum = 2 * a;
+    surrogate_inverse = (num1 +  num2) / denum;
+
+    // Gaussian of the inversed surrogate
+    Double_t arg = (surrogate_inverse - mean)/sigma;
+    Double_t func = gconst * TMath::Exp(-0.5*arg*arg);
+
+    return func;
+}
+
+double fitfunc_lowen(double * x, double * par) {
+
+    // Function proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+
+    // independent var
+    Double_t xx = x[0]; // TOT
+
+    // parameters for gaussian
+    Double_t gconst = par[0];
+    Double_t mean = par[1];
+    Double_t sigma = par[2];
+
+    // surrogate ^ -1
+    Double_t a = par[3];
+    Double_t b = par[4];
+    Double_t c = par[5];
+    Double_t t = par[6];
+
+    // Inverse of the surrogate ( = energy in keV)
+    Double_t surrogate_inverse, delta, num1, num2, denum;
+    delta = TMath::Power((b-a*t-xx),2) - 4 * a * (xx*t-c-b*t);
+    num1 = a*t + xx - b;
+    num2 = TMath::Sqrt(delta) ;
+    denum = 2 * a;
+    surrogate_inverse = (num1 +  num2) / denum;
+
+    // Gaussian of the inversed surrogate
+    Double_t arg = (surrogate_inverse - mean)/sigma;
+    Double_t func = gconst * TMath::Exp(-0.5*arg*arg);
+
+    return func;
+}
+
+
+
+void DrawGlobalSpectrum(TString s){
+
+
+	bool source_identified = false;
+	TOTCalib * source;
+	TString name;
+
+	vector<TOTCalib*> sourVec = calib->GetSourcesVector();
+	int it; // iterator
+
+	int orderCntr = 0;
+	for( it = 0; it < sourVec.size(); it++){
+		name = (sourVec[it])->GetCalibHandler()->GetSourcename();
+		if (name == s){
+			source = sourVec[it];
+			source_identified = true;
+			break;
+		}
+	}
+
+	if(!source_identified){
+		cout << "[ERROR] Source " << s.Data() << " unrecognized. Sources in your file are:" << endl;
+		for(it = 0; it < sourVec.size(); it++){
+			cout << sourVec[it]->GetCalibHandler()->GetSourcename() << "   " ; }
+		cout << endl;
+		return;
+	}
+
+	TString cname = s + "_globalSpectrum";
+	TString ctitle = "Global Spectrum - "+s;
+	TCanvas * c1 = new TCanvas(cname, ctitle);
+	if(source->GetGlobalHisto().empty()) calib->CreateGlobalKernelAndGetCriticalPoints();  // global histo is only constructed once
+	vector<double> v = source->GetGlobalHisto();
+	vector<double>::iterator i;
+	TH1I * h = new TH1I(s+"_global", s+"_global", v.size(), 0, v.size());
+	int cntr = 0;
+	for(i = v.begin(); i!=v.end(); i++){
+		h->Fill(cntr, *i);
+		cntr++;
+	}
+	h->GetXaxis()->SetTitle("TOT");
+	h->GetYaxis()->SetTitle("entries");
+	h->Draw("hist");
+
+}
+

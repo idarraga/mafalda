@@ -60,7 +60,9 @@ double GausFuncAdd(double * x, double * par);
 void printProgBar( int );
 #define __fitfunc_lowen_npars  7
 double fitfunc_lowen(double * x, double * par);
+double fitfunc_lowen_ZERO(double * x, double * par);
 double surrogatefunc_calib(double * x, double * par);
+double surrogatefunc_calib_ZERO(double * x, double * par);
 
 // Calibration Handler for each source
 class CalibHandler {
@@ -249,6 +251,7 @@ public :
 
 	vector<vector<double> > Get_m_histo(){return m_calibhistos;}; // each pixel has its own histogram
 	void SetGlobalHisto(vector<double> v){m_globalhisto=v;}; // every histogram are merged in this vector
+	vector<double> GetGlobalHisto(){return m_globalhisto;};
 
 	void SetGlobalCriticalPoints(vector<double> max, vector<double> min){ 
 		m_global_max=max;
@@ -282,6 +285,8 @@ public :
 		m_calibPoints_it = it;
 		m_calibSurrogateConstants = param;
 		m_surrogateStatus = status;
+		m_maxpix = status.rbegin()->first;
+		m_minpix = status.begin()->first;
 	};
 
 	void DumpSpectrumVectorFromSavedFile(	vector< vector<double> > spectrum){
@@ -316,6 +321,9 @@ public :
 	
 		m_gf_lowe = new TF1("gf_lowe", fitfunc_lowen, 0., maxrange, __fitfunc_lowen_npars);
 		m_gf_lowe->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
+
+		m_gf_lowe_ZERO = new TF1("gf_lowe_ZERO", fitfunc_lowen_ZERO, 0., maxrange, __fitfunc_lowen_npars);
+		m_gf_lowe_ZERO->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
 	}
 
 	int GetMatrixWidth(){return __matrix_width;};
@@ -411,6 +419,7 @@ private:
 	// Functions for fitting peaks in the data
 	TF1 * m_gf_linear;
 	TF1 * m_gf_lowe;
+	TF1 * m_gf_lowe_ZERO;
 	vector<TF1 * > m_extra_tf1_to_erase;
 
 	// Randon generators
