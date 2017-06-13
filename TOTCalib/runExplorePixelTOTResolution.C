@@ -149,7 +149,7 @@ void runExplorePixelTOTResolution()
 
     // First, draw histogram and kernel function  (stored in root file)
     hpx->GetXaxis()->SetTitle("TOT");
-    hpx->GetXaxis()->SetTitle("Counts");    
+    hpx->GetYaxis()->SetTitle("Counts");    
     hpx->Draw("HIST");
     kernel_func->Draw("same");
     kernel_func->SetLineColor(kBlack);
@@ -207,7 +207,7 @@ void runExplorePixelTOTResolution()
     
         // First, draw histogram and kernel function  (stored in root file)
         hpx_calibrated->GetXaxis()->SetTitle("Energy (keV)");
-        hpx_calibrated->GetXaxis()->SetTitle("Counts"); 
+        hpx_calibrated->GetYaxis()->SetTitle("Counts"); 
         hpx_calibrated->Draw("HIST");
         
         // Secondly, draw fit functions (from parameters stored in root file)
