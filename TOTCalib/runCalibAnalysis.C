@@ -26,6 +26,13 @@ class TOTCalib;
 TOTCalib* calib;
 Int_t palette[4] = {kWhite, kRed, kBlue, kGreen}; // status color palette
 
+const Int_t NRGBs = 5; // gradient color palette
+const Int_t NCont = 255;
+Double_t stops[NRGBs] = { 0.00, 0.34, 0.61, 0.84, 1.00 };
+Double_t red[NRGBs]   = { 0.00, 0.00, 0.87, 1.00, 0.51 };
+Double_t green[NRGBs] = { 0.00, 0.81, 1.00, 0.20, 0.00 };
+Double_t blue[NRGBs]  = { 0.51, 1.00, 0.12, 0.00, 0.00 };
+
 void LoadFile(TString);
 void DrawFullPixelCalib(int);
 void DrawFullPixelCalib(int,int);   
@@ -35,12 +42,12 @@ void DrawStatusMap();
 void DrawParameterMap(string);
 void DrawSpectrum(int,int,TString);    
 void DrawSpectrum(int,TString);        
-void DrawChiSquareMap();
 double surrogatefunc_cal(double*,double*);
 double surrogatefunc_calib_ZERO(double *, double *);  // New parametrization
 double fitfunc_lowen(double *, double *);
 double fitfunc_lowen_ZERO(double *, double *);  	  // New parametrization
 void DrawGlobalSpectrum(TString);
+Int_t GetMinimumNonEmptyBin(TH2D *);
 
 
 R__LOAD_LIBRARY(libTOTCalib.so);
@@ -53,7 +60,7 @@ void runCalibAnalysis (  ) {
 	int pix = 1000; // Work on this set of pixel
 	int x = 20; int y = 35;
 	
-    TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/GaAs500_3.root";//
+    TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/GaAs500.root";//
 	LoadFile(file);
 
 
@@ -68,7 +75,6 @@ void runCalibAnalysis (  ) {
 //
 	//DrawParameterMap("a");// use surrogate parameters a,b,c or t
 	//DrawStatusMap();
-	//DrawChiSquareMap();
 
 }
 
@@ -83,23 +89,23 @@ void LoadFile(TString s){
 	TTree * tsurr = (TTree*) f->Get("surrogateFunction");
 	TTree * tparam =(TTree*) f->Get("parameters");
 
-	map<int, vector<double> > * surr_p = nullptr;
-	map<int, int> *surr_status = nullptr;
+	map<int, vector<double> > * surr_p = 0;
+	map<int, int> *surr_status = 0;
 	tsurr->SetBranchAddress("parameters", &surr_p);
 	tsurr->SetBranchAddress("status", &surr_status);
 	tsurr->GetEntry(0); // this TTree has a single entry
 
-	map<int, vector< pair<double, double> > > * points = nullptr; //energy and mean
-	map<int, vector<double> > * sigmas = nullptr;
-	map<int, vector<double> > * constants = nullptr;
-	pair<double, double> * thres = nullptr; //threshold + error
-	vector<TString> * sn = nullptr; //source name
+	map<int, vector< pair<double, double> > > * points = 0; //energy and mean
+	map<int, vector<double> > * sigmas = 0;
+	map<int, vector<double> > * constants = 0;
+	pair<double, double> * thres = 0; //threshold + error
+	vector<TString> * sn = 0; //source name
 
 	// low energy fit parameter
-	map<int, vector<double> > *calibPoints_ia = nullptr;
-	map<int, vector<double> > *calibPoints_ib = nullptr;
-	map<int, vector<double> > *calibPoints_ic = nullptr;
-	map<int, vector<double> > *calibPoints_it = nullptr;
+	map<int, vector<double> > *calibPoints_ia = 0;
+	map<int, vector<double> > *calibPoints_ib = 0;
+	map<int, vector<double> > *calibPoints_ic = 0;
+	map<int, vector<double> > *calibPoints_it = 0;
 
 	tparam->SetBranchAddress("energyAndGausMean", &points);
 	tparam->SetBranchAddress("gausSigma", &sigmas);
@@ -119,10 +125,10 @@ void LoadFile(TString s){
 	// Create sub-TOTCalib objects from TTrees
 	vector<TString>::iterator it;
 	TOTCalib * tempSource;
-	vector< vector<double> > * spectrum = nullptr;
-	map<int, double> *CHpoints = nullptr; // points defined in calib handler object
-	map<int, int> *CHregions = nullptr; // regions defined in calib handler object
-	map<int, vector<double> > *max = nullptr; // identified peaks (required by DrawFullPixelCalib)
+	vector< vector<double> > * spectrum = 0;
+	map<int, double> *CHpoints = 0; // points defined in calib handler object
+	map<int, int> *CHregions = 0; // regions defined in calib handler object
+	map<int, vector<double> > *max = 0; // identified peaks (required by DrawFullPixelCalib)
 	double bandwidth;
 
 	for (it = (*sn).begin(); it != (*sn).end(); it++){
@@ -262,6 +268,7 @@ void DrawStatusMap(){
 	h->Draw("col");
 	ex1->Draw();
 	h->Draw("col same"); // must draw twice to set the right color palette
+	h->GetZaxis()->SetRangeUser(-2,1);
 }
 
 void DrawParameterMap(string p){
@@ -305,10 +312,12 @@ void DrawParameterMap(string p){
 	}
 	c1->cd();
 	h->SetStats(kFALSE);
-	TExec *ex2 = new TExec("ex2","gStyle->SetPalette(1);");
+	TExec *ex2 = new TExec("ex2","TColor::CreateGradientColorTable(NRGBs, stops, red, green, blue, NCont);");
 	h->Draw("colz");
 	ex2->Draw();
+	gStyle->SetNumberContours(255);
 	h->Draw("colz same"); // must draw twice to set the right color palette
+	h->GetZaxis()->SetRangeUser(h->GetBinContent(GetMinimumNonEmptyBin(h)), h->GetBinContent(h->GetMaximumBin()));
 }
 
 void DrawSpectrum(int x, int y, TString s){
@@ -377,9 +386,6 @@ void DrawSpectrum(int pix, TString s){
 
 	TH1 * h; TF1 * kf;
 
-	TLegend * leg1 = new TLegend(0.6, 0.6, 0.9, 0.9);
-	leg1->SetFillColor(kWhite);
-	leg1->SetBorderSize(1);
 
 	TF1 * gf; TF1 * gf_clone;
 
@@ -399,8 +405,6 @@ void DrawSpectrum(int pix, TString s){
 	kf->GetXaxis()->SetTitle("TOT");
 	kf->GetYaxis()->SetTitle("entries");
 
-	leg1->AddEntry(kf, "k.d.f. (envelope)", "L");
-	leg1->AddEntry(h, "Calibration data", "L");
 
 	TLatex * l1 = new TLatex();
 	l1->DrawLatex(source->GetNBins()/2, h->GetMaximum() * 0.5 , name);
@@ -470,8 +474,6 @@ void DrawSpectrum(int pix, TString s){
 		gf_clone->SetLineColor(kRed);
 		gf_clone->Draw("same");              
 
-		leg1->AddEntry(gf_clone, "Fit on spectrum", "L");
-
 
 		//TString peak = TString::Format( "%.1f  -> %.3f keV", calibFitPoints[orderCntr].second, calibPoints[p] );
 		TString peak = TString::Format( "%.1f  -> %.3f keV", fit_mean[orderCntr].second, calibPoints[p] );
@@ -482,13 +484,14 @@ void DrawSpectrum(int pix, TString s){
 		orderCntr++;
 	}
 
-	leg1->Draw();
 	c1->Update();
 
 }
 
 
-void DrawChiSquareMap(){
+// Chi2 map is irrelevent in most cases : error on the surrogate function if often miscalculated
+// and a few pixels may have a huge chi2 if one of the source is close to the divergence point
+/*void DrawChiSquareMap(){
 	TString cname = "ChiSquare_map";
 	TString ctitle = "Surrogate fit - Chi2";
 	TCanvas * c1 = new TCanvas(cname, ctitle);
@@ -526,11 +529,13 @@ void DrawChiSquareMap(){
 	c1->cd();
 
 	h->SetStats(kFALSE);
-	TExec *ex2 = new TExec("ex2","gStyle->SetPalette(1);");
+	TExec *ex2 = new TExec("ex2","TColor::CreateGradientColorTable(NRGBs, stops, red, green, blue, NCont);");
 	h->Draw("colz");
 	ex2->Draw();
+	gStyle->SetNumberContours(255);
 	h->Draw("colz same"); // must draw twice to set the right color palette
-}
+	h->GetZaxis()->SetRangeUser(h->GetBinContent(GetMinimumNonEmptyBin(h)), h->GetBinContent(h->GetMaximumBin()));
+}*/
 
 
 double surrogatefunc_calib(double * x, double * par) {
@@ -679,7 +684,7 @@ void DrawGlobalSpectrum(TString s){
 	if(source->GetGlobalHisto().empty()) calib->CreateGlobalKernelAndGetCriticalPoints();  // global histo is only constructed once
 	vector<double> v = source->GetGlobalHisto();
 	vector<double>::iterator i;
-	TH1I * h = new TH1I(s+"_global", s+"_global", v.size(), 0, v.size());
+	TH1I * h = new TH1I(s+"_glob", s+"_global", v.size(), 0, v.size());
 	int cntr = 0;
 	for(i = v.begin(); i!=v.end(); i++){
 		h->Fill(cntr, *i);
@@ -691,3 +696,21 @@ void DrawGlobalSpectrum(TString s){
 
 }
 
+Int_t GetMinimumNonEmptyBin(TH2D *h){
+	const int nbinsX = h->GetNbinsX();
+	const int nbinsY = h->GetNbinsY();
+	double min_content = -1.;
+	int minX = 0; 
+	int minY = 0;
+
+	for(int i = 1; i <= nbinsX; i++){
+		for(int j =1 ; j <= nbinsY; j++){
+			double content = h->GetBinContent(i,j);
+			if((content > 0 && content < min_content) || min_content < 0){
+				min_content = content;
+				minX = i; minY = j;
+			}
+		}
+	}
+	return h->GetBin(minX,minY);
+}
