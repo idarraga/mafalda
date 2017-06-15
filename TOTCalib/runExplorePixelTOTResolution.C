@@ -89,7 +89,7 @@ void runExplorePixelTOTResolution()
     vector<double> *br_double_sigmafit_calibrated=0; 
     vector<double> *br_double_totmeanfit_calibrated=0;
     vector<double> *br_double_constantfit_calibrated=0;
-    TH1I *hpx_calibrated = 0;    
+    TH1D *hpx_calibrated = 0;
     static TString calibBranch("FitConstant_calibrated");
     TObject* calib_branch = T->GetListOfBranches()->FindObject(calibBranch);
     bool calib_present = false;

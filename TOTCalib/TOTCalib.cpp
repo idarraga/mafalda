@@ -12,6 +12,7 @@
 #include <TFitResult.h>
 #include <TMath.h>
 #include <TLegend.h>
+#include <TBenchmark.h>
 
 #include <time.h>
 
@@ -22,6 +23,7 @@
 #include <queue>
 #include <map>
 #include <algorithm>
+#include <iomanip>
 
 TOTCalib::TOTCalib(){
 	m_TOTMultiplierFactor = 1.0;
@@ -1394,31 +1396,29 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
     
     // I also want to save maps
     TH2I* SingleHitCounts = new TH2I("SingleHitCounts","SingleHitCounts",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
-    TH2I* SingleHitKernelTOTpeaks = new TH2I("SingleHitKernelTOTpeaks","SingleHitKernelTOTpeaks",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
-    TH2I* SingleHitFitMeans = new TH2I("SingleHitFitMeans","SingleHitFitMeans",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
-    TH2I* SingleHitFitSigmas = new TH2I("SingleHitFitSigmas","SingleHitFitSigmas",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
-    TH2I* SingleHitFitConstants = new TH2I("SingleHitFitConstants","SingleHitFitConstants",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2D* SingleHitKernelTOTpeaks = new TH2D("SingleHitKernelTOTpeaks","SingleHitKernelTOTpeaks",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2D* SingleHitFitMeans = new TH2D("SingleHitFitMeans","SingleHitFitMeans",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2D* SingleHitFitSigmas = new TH2D("SingleHitFitSigmas","SingleHitFitSigmas",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2D* SingleHitFitConstants = new TH2D("SingleHitFitConstants","SingleHitFitConstants",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
 
     vector<double> br_double_sigmafit_calibrated; 
     vector<double> br_double_totmeanfit_calibrated;
     vector<double> br_double_constantfit_calibrated;
-    TH1I *br_TH1_spectrum_calibrated = 0;   
-    TH2I* SingleHitFitConstants_calibrated = new TH2I("SingleHitFitConstants_calibrated","SingleHitFitConstants_calibrated",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);            
-    TH2I* SingleHitFitMeans_calibrated = new TH2I("SingleHitFitMeans_calibrated","SingleHitFitMeans_calibrated",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
-    TH2I* SingleHitFitSigmas_calibrated = new TH2I("SingleHitFitSigmas_calibrated","SingleHitFitSigmas_calibrated",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH1D *br_TH1_spectrum_calibrated = 0;
+    TH2D* SingleHitFitConstants_calibrated = new TH2D("SingleHitFitConstants_calibrated","SingleHitFitConstants_calibrated",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2D* SingleHitFitMeans_calibrated = new TH2D("SingleHitFitMeans_calibrated","SingleHitFitMeans_calibrated",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2D* SingleHitFitSigmas_calibrated = new TH2D("SingleHitFitSigmas_calibrated","SingleHitFitSigmas_calibrated",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
     if (calib_required){
         tree->Branch("FitSigma_calibrated", &br_double_sigmafit_calibrated);
         tree->Branch("FitMean_calibrated", &br_double_totmeanfit_calibrated);
         tree->Branch("FitConstant_calibrated", &br_double_constantfit_calibrated);
-        tree->Branch("Histo_Spectrum_calibrated", "TH1I", &br_TH1_spectrum_calibrated, bsize,split);        
+        tree->Branch("Histo_Spectrum_calibrated", "TH1D", &br_TH1_spectrum_calibrated, bsize,split);
     }
     
-    /********************** Part mainly inspired From Blender() *******************************
-     *
-     * The goal is to copy Blender and write data stored in vector "store"
-     * (filled with ProcessOneSource) to the rootfile
-     *
-    */
+    //********************** Part mainly inspired From Blender() *******************************
+
+    TStopwatch timer;
+    timer.Start(kTRUE);
 
     // Only one source used for this algo
     m_allSources.push_back( this ); // vector<TOTCalib *> m_allSources;
@@ -1454,6 +1454,8 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
     
     // iterate over pixels
     for (int pix = m_minpix ; pix <= m_maxpix ; pix++) {
+
+        pair<int, int> pix_xy = XtoXY(pix, __matrix_width);
 
         // Skip the bad pixels
         if ( PixelInBadPixelList(pix) ) continue;
@@ -1494,16 +1496,9 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
             // Obtain the histogram for this pixel
             int totval = 0;
             double totmeanfit = 0., sigmafit = 0., constantfit = 0.;
-                
-//            cout<<"--------"<<endl;            
-//            cout<<"a: "<<m_a[pix]<<endl;
-//            cout<<"b: "<<m_b[pix]<<endl;
-//            cout<<"c: "<<m_c[pix]<<endl;
-//            cout<<"t: "<<m_t[pix]<<endl;
-//            cout<<"--------"<<endl;
-            
+                           
             TH1I * hf = nullptr;
-            TH1I * hf_calibrated = nullptr;            
+            TH1D * hf_calibrated = nullptr;
             
             // The data histogram
             hf = s->GetHisto(pix, "SavePixelResolution");
@@ -1549,6 +1544,22 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
                        st->pointsSave_it.push_back( 0. );
                     } 
                     
+                    // Case with calib: special fitting, no fit with low energy
+                    if (calib_required){
+
+                        Double_t en = GetE(pix_xy,totmeanfit,m_a,m_b,m_c,m_t);
+
+                        gf_calibrated = m_gf_linear;
+                        gf_calibrated->FixParameter(1,en);
+                        hf_calibrated->Fit(gf_calibrated, "NQ", "" , en-5., en+5.);
+                        //cout<<"0: "<<gf->GetParameter(0)<<" 1: "<<gf->GetParameter(1)<<" 2: "<<gf->GetParameter(2)<<endl;
+
+                        constantfit_calibrated.push_back(gf_calibrated->GetParameter(0) );
+                        meanfit_calibrated.push_back( gf_calibrated->GetParameter(1) );
+                        sigmafit_calibrated.push_back( gf_calibrated->GetParameter(2) );
+
+                    }
+
                 } else {
                     
                     totmeanfit = -1;
@@ -1566,43 +1577,24 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
                         st->pointsSave_ic.push_back( 0. );
                         st->pointsSave_it.push_back( 0. );
                     }
-                }
-                
 
-                        
-                //if(m_verbose == __VER_DEBUG) cout << " { status : " << status << " } ";
-                
+                    // Case with calib: special fitting, no fit with low energy
+                    if (calib_required){
+
+                        constantfit_calibrated.push_back( -1. );
+                        meanfit_calibrated.push_back( -1. );
+                        sigmafit_calibrated.push_back( -1. );
+
+                    }
+                }
+                                                        
                 // These are the points for the surrogate function fit      
                 st->pointsSave.push_back( make_pair( (*EpointItr).second, totmeanfit ) ); // func_TOTatMax                           
                 st->pointsSaveSigmas.push_back( sigmafit );                       // The sigma of the fit
                 st->pointsSaveConstants.push_back( constantfit );                 // The constant of the fit
                 st->calibTOTPeaks.push_back( totval );                            // The original TOT val where the fit starts
                 st->peakFitStatus.push_back( status );
-        
-                /*if ( m_verbose != __VER_QUIET ){
-                    cout<<"0: "<<gf->GetParameter(0)<<" 1: "<<gf->GetParameter(1)<<" 2: "<<gf->GetParameter(2)<<" 3: "<<gf->GetParameter(3)<<" 4: "<<gf->GetParameter(4)<<" 5: "<<gf->GetParameter(5)<<" 6: "<<gf->GetParameter(6)<<endl;                    
-                    cout<<"Max: "<<func_TOTatMax<<endl;
-                }*/
-                
-                // Case with calib: special fitting, no fit with low energy
-                if (calib_required){
-                    
-                    gf_calibrated = m_gf_linear;
-                    hf_calibrated->Fit(gf_calibrated, "NQRS", "" , 0, 100);
-                    //cout<<"0: "<<gf->GetParameter(0)<<" 1: "<<gf->GetParameter(1)<<" 2: "<<gf->GetParameter(2)<<endl;
-                    
-                    constantfit_calibrated.push_back(gf_calibrated->GetParameter(0) );
-                    meanfit_calibrated.push_back( gf_calibrated->GetParameter(1) );                    
-                    sigmafit_calibrated.push_back( gf_calibrated->GetParameter(2) );
-
-//                    totmeanfit = gf->GetParameter(1);                    
-//                    st->pointsSave.push_back( make_pair( (*EpointItr).second, totmeanfit ) );  // The mean of the fit
-//                    st->pointsSave_ia.push_back( 0. );
-//                    st->pointsSave_ib.push_back( 0. );
-//                    st->pointsSave_ic.push_back( 0. );
-//                    st->pointsSave_it.push_back( 0. );                    
-                }
-                
+                        
             } // end of loop on calib points
             
             if (hf) delete hf; 
@@ -1619,18 +1611,11 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
             missingInfo = true;
         }        
        
-       pair<int, int> pix_xy = XtoXY(pix, __matrix_width);
 
-       /***************** Part mainly inspired from DrawFullPixelCalib ***************************
-        * (because I'm looking for stored spectra, fit results and kernel function)
-        */
-       
+       //***************** Part mainly inspired from DrawFullPixelCalib ***************************
+
        // - Get list of peaks identified (before the selection of peaks for fitting)
        map<int, double> calibPoints = m_allSources[sour_num]->GetCalibHandler()->GetCalibPoints();
-       vector<double> peaks = (m_allSources[sour_num]->GetMaxPeaksIdentified())[pix];
-       
-       // - Points used in the fit
-       vector< pair<double, double> > calibFitPoints = GetCalibPoints(pix);
        
        // - Number of points
        int nCalibPoints = (int)calibPoints.size();
@@ -1639,7 +1624,6 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
        TF1 * kf = nullptr;
        kf = m_allSources[sour_num]->GetKernelDensityFunction(pix);
        
-       // Get fit results for this pixel
        br_double_sigmafit.clear();
        br_double_constantfit.clear();
        br_double_totmeanfit.clear();
@@ -1680,7 +1664,7 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
                if (calib_required){
                    br_double_constantfit_calibrated.push_back(constantfit_calibrated.at(p));
                    br_double_totmeanfit_calibrated.push_back(meanfit_calibrated.at(p));
-                   br_double_sigmafit_calibrated.push_back(sigmafit_calibrated.at(p));                   
+                   br_double_sigmafit_calibrated.push_back(sigmafit_calibrated.at(p));
                }
                
            }
@@ -1705,8 +1689,6 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
                
            }
            
-           // Fill tree (and count map)
-
            br_TH1_spectrum = s->GetHisto(pix, "SavePixelResolution"); 
            if (calib_required){
                br_TH1_spectrum_calibrated = s->GetHistoCalibrated(pix,"SavePixelResolution_calibrated",energymax,m_a,m_b,m_c,m_t);
@@ -1762,9 +1744,12 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
     SingleHitFitSigmas_calibrated->Write();    
     tree->Write();
     m_output_root_Thomas->Close();
+    cout<<setprecision(3)<<"Real time: "<<timer.RealTime()<<" s"<<endl;
+    cout<<setprecision(3)<<"CPU time: "<<timer.CpuTime()<<" s"<<endl;
+
 }
 
-TH1I * TOTCalib::GetHistoCalibrated(int pix, TString extraName, double energymax, double *m_a, double *m_b, double *m_c, double *m_t){
+TH1D * TOTCalib::GetHistoCalibrated(int pix, TString extraName, double energymax, double *m_a, double *m_b, double *m_c, double *m_t){
 
 	// Create an histo from the vector<double> only if requested here
 	TString name = m_calhandler->GetSourcename();
@@ -1776,9 +1761,9 @@ TH1I * TOTCalib::GetHistoCalibrated(int pix, TString extraName, double energymax
 	name += pix;
     
     double rangemax = energymax*1.8;
-    double binsize = .2; // keV
+    double binsize = .5; // keV
     int nbins = rangemax/binsize;
-	TH1I * h = new TH1I(name, name, nbins, 0, rangemax);
+    TH1D * h = new TH1D(name, name, nbins, 0, rangemax);
 	vector<double> hist = m_calibhistos[pix];
 	vector<double>::iterator i = hist.begin();
 
