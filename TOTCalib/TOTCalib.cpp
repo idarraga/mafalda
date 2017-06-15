@@ -1334,33 +1334,6 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 
 void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_c, TString file_t){
 
-/* Function to save resolution data of each pixel for a single low
- * energy X-ray source without doing the calibration (single pixel clusters only).
- * If several peaks are present (e.g. an overlap peak), it selects the peak with highest amplitude
- *
- * To be used with only one source, just after calling Loop() in runTOTCalib.C
- * Example:
- *  TOTCalib * pCd = new TOTCalib("MAFOutput_TOTCalibrationPreparation.root","ZrFluo", minpix, maxpix, 200, nTotalFrames);
- *  pCd->SetKernelBandWidth(25);
- *  pCd->Loop();
- *  pCd->SavePixelResolution();
- *
- * Everything must be commented out after its use (i.e. Blender(), Finalize etc...)
- * Number of frames and pixels can be set at the start of the macro, as
- * for the calibration.
- *
- * It saves a root files containing a tree with fit results of all peaks (if there are more
- * than one, e.g. AmIn or overlaping peak), and maps containing only one peak (the one
- * with highest counts at mean for now).
- *
- * Use ExplorePixelTOTResolution to display spectra and fits by pointing the pixel with mouse!
- *
- * It could have been done in mafalda_framework but I wanted to use the
- * algos from TOTCalib code which is appropriate for this purpose. It is an
- * adapted copy of Blender() followed by an adapted copy of DrawFullPixelCalib()
- *
-*/
-
     //************************* Prepare what should be saved ***************************
     bool calib_required = false;
     if (file_a != "") calib_required = true;
@@ -1379,6 +1352,7 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
     vector<double> br_double_bfit;
     vector<double> br_double_cfit;
     vector<double> br_double_tfit;
+    vector<int> br_double_fitstatus;
 
     Int_t split = 0;
     Int_t bsize = 64000;
@@ -1393,9 +1367,11 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
     tree->Branch("Fitb", &br_double_bfit);
     tree->Branch("Fitc", &br_double_cfit);
     tree->Branch("Fitt", &br_double_tfit);
+    tree->Branch("FitStatus", &br_double_fitstatus);
     
-    // I also want to save maps
+    // Maps
     TH2I* SingleHitCounts = new TH2I("SingleHitCounts","SingleHitCounts",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
+    TH2I* SingleHitFitStatus = new TH2I("SingleHitFitStatus","SingleHitFitStatus",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);    
     TH2D* SingleHitKernelTOTpeaks = new TH2D("SingleHitKernelTOTpeaks","SingleHitKernelTOTpeaks",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
     TH2D* SingleHitFitMeans = new TH2D("SingleHitFitMeans","SingleHitFitMeans",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
     TH2D* SingleHitFitSigmas = new TH2D("SingleHitFitSigmas","SingleHitFitSigmas",__matrix_width, 0, __matrix_width,__matrix_width, 0, __matrix_width);
@@ -1435,8 +1411,7 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
     double m_a[__matrix_width*__matrix_height];        
     double m_b[__matrix_width*__matrix_height];
     double m_c[__matrix_width*__matrix_height];
-    double m_t[__matrix_width*__matrix_height];
-    
+    double m_t[__matrix_width*__matrix_height];    
     
     // if calibrated data is required from macro, get coeff from files
     double energymax = 0.;
@@ -1517,7 +1492,7 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
                                     
                 gf = FittingFunctionSelector( (*i).first, s , calibPointIterator );
                 
-                if (totval >=0){
+                if (totval >= 0){
                     
                     if(m_verbose == __VER_DEBUG) cout << " [ fit func --> " << gf->GetName() << "] ";
                                       
@@ -1548,16 +1523,13 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
                     if (calib_required){
 
                         Double_t en = GetE(pix_xy,totmeanfit,m_a,m_b,m_c,m_t);
-
                         gf_calibrated = m_gf_linear;
                         gf_calibrated->FixParameter(1,en);
                         hf_calibrated->Fit(gf_calibrated, "NQ", "" , en-5., en+5.);
                         //cout<<"0: "<<gf->GetParameter(0)<<" 1: "<<gf->GetParameter(1)<<" 2: "<<gf->GetParameter(2)<<endl;
-
                         constantfit_calibrated.push_back(gf_calibrated->GetParameter(0) );
                         meanfit_calibrated.push_back( gf_calibrated->GetParameter(1) );
                         sigmafit_calibrated.push_back( gf_calibrated->GetParameter(2) );
-
                     }
 
                 } else {
@@ -1565,26 +1537,15 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
                     totmeanfit = -1;
                     constantfit = -1;
                     sigmafit = -1;
-                    status = -1; //will still try to fit the surrogate w/o this source (unless they all have -1 status)
-                    if( TString(gf->GetName()).Contains("gf_lowe") ) {  // in this case store the extra params
-                        st->pointsSave_ia.push_back( -1.);
-                        st->pointsSave_ib.push_back( -1.);
-                        st->pointsSave_ic.push_back( -1.);
-                        st->pointsSave_it.push_back( -1.);
-                    } else {
-                        st->pointsSave_ia.push_back( 0. );
-                        st->pointsSave_ib.push_back( 0. );
-                        st->pointsSave_ic.push_back( 0. );
-                        st->pointsSave_it.push_back( 0. );
-                    }
-
-                    // Case with calib: special fitting, no fit with low energy
-                    if (calib_required){
-
+                    status = -1; 
+                    st->pointsSave_ia.push_back( -1.);
+                    st->pointsSave_ib.push_back( -1.);
+                    st->pointsSave_ic.push_back( -1.);
+                    st->pointsSave_it.push_back( -1.);
+                    if (calib_required){                        
                         constantfit_calibrated.push_back( -1. );
                         meanfit_calibrated.push_back( -1. );
                         sigmafit_calibrated.push_back( -1. );
-
                     }
                 }
                                                         
@@ -1611,7 +1572,6 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
             missingInfo = true;
         }        
        
-
        //***************** Part mainly inspired from DrawFullPixelCalib ***************************
 
        // - Get list of peaks identified (before the selection of peaks for fitting)
@@ -1630,7 +1590,8 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
        br_double_afit.clear();
        br_double_bfit.clear();
        br_double_cfit.clear();
-       br_double_tfit.clear();       
+       br_double_tfit.clear(); 
+       br_double_fitstatus.clear();              
        if (calib_required){
            br_double_constantfit_calibrated.clear();           
            br_double_totmeanfit_calibrated.clear();
@@ -1639,7 +1600,7 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
        
        Int_t ncounts = 0;
 
-       if (!(st->pointsSaveSigmas.empty()) && !(st->pointsSaveConstants.empty()) ){ //check if at least one fit succeded
+       if (!(st->pointsSaveSigmas.empty()) && !(st->pointsSaveConstants.empty())){ //check if at least one fit succeded
 
            // Loop on all peaks, store fit results and select the one with highest amplitude
            double selected_point_amplitude = 0.;
@@ -1665,8 +1626,7 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
                    br_double_constantfit_calibrated.push_back(constantfit_calibrated.at(p));
                    br_double_totmeanfit_calibrated.push_back(meanfit_calibrated.at(p));
                    br_double_sigmafit_calibrated.push_back(sigmafit_calibrated.at(p));
-               }
-               
+               }              
            }
 
            // Get the mean of the gaussian fit
@@ -1677,7 +1637,12 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
            SingleHitFitMeans->Fill(pix_xy.first,pix_xy.second,pair_Energy_TOTmeanfit.second);
            SingleHitFitSigmas->Fill(pix_xy.first,pix_xy.second,st->pointsSaveSigmas.at(peak_for_histos));
            SingleHitFitConstants->Fill(pix_xy.first,pix_xy.second,st->pointsSaveConstants.at(peak_for_histos));
-           
+           if (missingInfo){
+               SingleHitFitStatus->Fill(pix_xy.first,pix_xy.second,-1);
+           }else{
+               SingleHitFitStatus->Fill(pix_xy.first,pix_xy.second,1);               
+           }
+
            if (calib_required){
                SingleHitFitConstants_calibrated->Fill(pix_xy.first,pix_xy.second,constantfit_calibrated.at(peak_for_histos));
                SingleHitFitMeans_calibrated->Fill(pix_xy.first,pix_xy.second,meanfit_calibrated.at(peak_for_histos));
@@ -1685,14 +1650,12 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
            }else{
                SingleHitFitConstants_calibrated->Fill(pix_xy.first,pix_xy.second,0);
                SingleHitFitMeans_calibrated->Fill(pix_xy.first,pix_xy.second,0);
-               SingleHitFitSigmas_calibrated->Fill(pix_xy.first,pix_xy.second,0);           
-               
+               SingleHitFitSigmas_calibrated->Fill(pix_xy.first,pix_xy.second,0);             
            }
            
            br_TH1_spectrum = s->GetHisto(pix, "SavePixelResolution"); 
            if (calib_required){
-               br_TH1_spectrum_calibrated = s->GetHistoCalibrated(pix,"SavePixelResolution_calibrated",energymax,m_a,m_b,m_c,m_t);
-               
+               br_TH1_spectrum_calibrated = s->GetHistoCalibrated(pix,"SavePixelResolution_calibrated",energymax,m_a,m_b,m_c,m_t);        
            }
            ncounts = br_TH1_spectrum->Integral();
            SingleHitCounts->Fill(pix_xy.first,pix_xy.second,ncounts);
@@ -1715,6 +1678,7 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
            SingleHitFitConstants_calibrated->Fill(pix_xy.first,pix_xy.second,0);
            SingleHitFitMeans_calibrated->Fill(pix_xy.first,pix_xy.second,0);
            SingleHitFitSigmas_calibrated->Fill(pix_xy.first,pix_xy.second,0);           
+           SingleHitFitStatus->Fill(pix_xy.first,pix_xy.second,-1);
 
            // Fill tree (and count map)
            br_TH1_spectrum = s->GetHisto(pix, "SavePixelResolution");               
@@ -1742,8 +1706,10 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
     SingleHitFitConstants_calibrated->Write();
     SingleHitFitMeans_calibrated->Write();
     SingleHitFitSigmas_calibrated->Write();    
+    SingleHitFitStatus->Write();
     tree->Write();
     m_output_root_Thomas->Close();
+    cout<<"---------- Done. Timers for SavePixelResolution() -----------"<<endl;
     cout<<setprecision(3)<<"Real time: "<<timer.RealTime()<<" s"<<endl;
     cout<<setprecision(3)<<"CPU time: "<<timer.CpuTime()<<" s"<<endl;
 
