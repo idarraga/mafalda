@@ -618,7 +618,7 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 				totmeanfit = gf->GetParameter(1);
 				sigmafit = TMath::Abs ( gf->GetParameter(2) );
             	if ( TString(gf->GetName()).Contains("gf_lowe") ) {
-            	    g->SetPoint(cntr, (*i).first, func_TOTatMax ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
+            	    g->SetPoint(cntr, (*i).first, func_TOTatMax ); // for gf_lowe the tot point for the surrogate fit is not a gaussian mean but the tot (x coordinate) at the function maximum
             	    g->SetPointError(cntr, 0., sigmafit );
             	} else {
             	    g->SetPoint(cntr, (*i).first, totmeanfit ); // E, TOT (from the fit in this context)
@@ -1332,13 +1332,13 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 
 }
 
-void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_c, TString file_t){
+void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString file_b, TString file_c, TString file_t){
 
     //************************* Prepare what should be saved ***************************
     bool calib_required = false;
     if (file_a != "") calib_required = true;
     
-    TFile * m_output_root_Thomas = new TFile("output_pixelResolution.root", "RECREATE");
+    TFile * m_output_root_Thomas = new TFile(outputname+".root", "RECREATE");
     m_output_root_Thomas->cd();
     TTree *tree = new TTree("SavePixelResolution","SavePixelResolution");
     int br_int_pixID;
@@ -1407,7 +1407,7 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
 
     m_gf_lowe = new TF1("gf_lowe", fitfunc_lowen, 0., maxrange, __fitfunc_lowen_npars);
     m_gf_lowe->SetParameters(1, 1, m_bandwidth, 1,1,1,1); //!!Please check if m_bandwidth is ok (if many sources)
-
+    
     double m_a[__matrix_width*__matrix_height];        
     double m_b[__matrix_width*__matrix_height];
     double m_c[__matrix_width*__matrix_height];
@@ -1422,11 +1422,11 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
         map<int, double> calibPoints = handler->GetCalibPoints();
         int npoints = calibPoints.size();    
         energymax = calibPoints[npoints-1];
-        cout<<"Max energy in spectrum: "<< energymax<<" keV. Will use it for histo range."<<endl;        
+        cout<<setprecision(3)<<"Highest expected peak in spectrum: "<< energymax<<" keV. Will use it for histo range."<<endl;        
     }else{
         cout<<"------ Using TOT spectra ------"<<endl; 
     }
-    
+        
     // iterate over pixels
     for (int pix = m_minpix ; pix <= m_maxpix ; pix++) {
 
@@ -1466,7 +1466,6 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
         
             // The selected fitting function.  Do not delete in this scope !
             TF1 * gf = nullptr;
-            TF1 * gf_calibrated = nullptr;
         
             // Obtain the histogram for this pixel
             int totval = 0;
@@ -1519,17 +1518,43 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
                        st->pointsSave_it.push_back( 0. );
                     } 
                     
-                    // Case with calib: special fitting, no fit with low energy
-                    if (calib_required){
+                    // Case with calib: can't use PeakFit because of fit function range
+                    if (calib_required ){
 
                         Double_t en = GetE(pix_xy,totmeanfit,m_a,m_b,m_c,m_t);
-                        gf_calibrated = m_gf_linear;
-                        gf_calibrated->FixParameter(1,en);
-                        hf_calibrated->Fit(gf_calibrated, "NQ", "" , en-5., en+5.);
-                        //cout<<"0: "<<gf->GetParameter(0)<<" 1: "<<gf->GetParameter(1)<<" 2: "<<gf->GetParameter(2)<<endl;
-                        constantfit_calibrated.push_back(gf_calibrated->GetParameter(0) );
-                        meanfit_calibrated.push_back( gf_calibrated->GetParameter(1) );
-                        sigmafit_calibrated.push_back( gf_calibrated->GetParameter(2) );
+                        
+                        if (en>=0 && en<=energymax*1.8){
+                            
+                            TF1 * gf_calibrated = new TF1("gf_linear_calibrated", "gaus(0)", 0., energymax*1.8);    
+                            // ******* TODO: automatic set params 0 and 2 (keep 1 fixed) *****
+                            // ******* TODO: automatic calibrated function and histo range (not 1.8, also in func GetHistoCalibrated) *****
+                            
+                            gf_calibrated->FixParameter(1,en);
+                            gf_calibrated->SetParameter(0,50.);
+                            gf_calibrated->SetParameter(2,10.);
+                                                        
+                            hf_calibrated->Fit(gf_calibrated, "NBQ", "" , en-5., en+5.);
+                            // N: do not store graphics function
+                            // Q: Quiet
+                            // R: use function range
+                            // B: to fix parameters (only required with predefined function like gaus).
+                            
+                            //cout<<setprecision(5)<<en<<" "<< gf_calibrated->GetParameter(1)<<endl;
+                            
+                            //cout<<"0: "<<gf->GetParameter(0)<<" 1: "<<gf->GetParameter(1)<<" 2: "<<gf->GetParameter(2)<<endl;
+                            constantfit_calibrated.push_back(gf_calibrated->GetParameter(0) );
+                            meanfit_calibrated.push_back( gf_calibrated->GetParameter(1) );
+                            sigmafit_calibrated.push_back( gf_calibrated->GetParameter(2) );
+
+                            delete gf_calibrated;
+                            
+                        }else{
+                            
+                            constantfit_calibrated.push_back(-1.);
+                            meanfit_calibrated.push_back(-1.);
+                            sigmafit_calibrated.push_back(-1.);
+                         }
+
                     }
 
                 } else {
@@ -2172,9 +2197,13 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 	// Also is there is less peaks identified than calibration points
 	//  this pixel can not be processed.
 	if( peaks.empty() || peaks.size() < calibPoints.size() ) { //JS 23/03/17
-		cout << "[WARNING] Not enough peaks were identified for pixel " << pix << " and source "<< s->GetCalibHandler()->GetSourcename() <<endl; 
-		cout << "          Setting all peaks to -1." << endl;
-		for (int k = 0; k < (int)calibPoints.size(); k++){
+		
+        if (m_verbose != __VER_QUIET){
+            cout << "[WARNING] Not enough peaks were identified for pixel " << pix << " and source "<< s->GetCalibHandler()->GetSourcename() <<endl; 
+            cout << "          Setting all peaks to -1." << endl;            
+        }
+		
+        for (int k = 0; k < (int)calibPoints.size(); k++){
 			points.push_back(
 				make_pair(
 					TMath::Abs(calibPoints[k]),
