@@ -3,7 +3,7 @@
  *  TOT calibration for a Timepix device
  */
 
-#define TOTCalib_cxx
+#define TOTCalib_cxx 
 #include "TOTCalib.h"
 #include <TH2.h>
 #include <TStyle.h>
@@ -236,11 +236,29 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
 	double loc_bandwidth = s->GetKernelBandWidth();
 	if(m_verbose == __VER_DEBUG_LOOP) { cout << "[RAND] Producing a set of random fit parameters." << endl; }    
     
-	if ( TString(f->GetName()).Contains("gf_lowe") ) { // FIXME: this case is Ad hoc
+	if ( TString(f->GetName()).Contains("gf_lowe") ) {
 
-		//pars = new double (__npars_lowe_fitfunc);
-		// return random numbers in ]0,1]
-		//m_rand1->RndmArray(__npars_lowe_fitfunc, pars);
+		if (globalEstimationSuccess){ // estimation was successful
+
+			f->SetParameter(0, TMath::Max( (Double_t)0., (m_glob_const.first) + (m_rand1->Rndm()*2 - 1) * 10*(m_glob_const.second)) ) ;
+			// p1 is the mean --> fixed in PeakFit()
+			// p2 is the sigma 
+			f->SetParameter(2, TMath::Max( (Double_t) 0., m_glob_sig.first + (m_rand1->Rndm()*2 - 1) * 2*m_glob_sig.second) );       	
+			// p3 is a --> fixed later on if at least 2 fits in the linear region succeeded     
+			f->SetParameter(3, TMath::Max( (Double_t) 0., m_glob_a.first + (m_rand1->Rndm()*2 - 1) * m_glob_a.second) ); 
+			// p4 is b --> fixed later on if at least 2 fits in the linear region succeeded
+			f->SetParameter(4, TMath::Max( (Double_t) 0., m_glob_b.first + (m_rand1->Rndm()*2 - 1) * 3*m_glob_b.second) );      
+			// p5 is c or e0
+			if (m_calMethod == __calibJakubekAlt){
+				f->SetParameter(5, TMath::Max( (Double_t) 0., m_glob_e0.first + (m_rand1->Rndm()*2 - 1) * 3*m_glob_e0.second) );
+			} else {
+				f->SetParameter(5, TMath::Max( (Double_t) 0., m_glob_c.first + (m_rand1->Rndm()*2 - 1) * 3*m_glob_c.second) );
+			}
+			// p6 is t
+			f->SetParameter(6, TMath::Max( (Double_t) 0.,  m_glob_t.first + (m_rand1->Rndm()*2 - 1) * 2*m_glob_t.second) );
+
+
+		} else { // Ad hoc, to fix
 
         // Range for randomization --> (hint-hint*fraction/2 , hint+hint*fraction/2)   
         // Hints for each parameter are given in TOTCalib.h
@@ -254,13 +272,17 @@ void TOTCalib::RandomFitParameters (TF1 * f, TH1 * h, int tot, TOTCalib* s) {
         f->SetParameter(3, __lowen_para_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );       
         // p4 is b --> fixed later on if at least 2 fits in the linear region succeeded
         f->SetParameter(4, __lowen_parb_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );       
-        // p5 is c. Random --> (-50, 350)
-        f->SetParameter(5, __lowen_parc_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );       
+        // p5 is c or e0
+        if (m_calMethod == __calibJakubekAlt){
+				f->SetParameter(5, 2*__lowen_part_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );
+			} else {
+				f->SetParameter(5, __lowen_parc_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) ); //  Random --> (-50, 350)    
+		}
         // p6 is t. Random --> (1, 6)
         f->SetParameter(6, __lowen_part_hint * (xmin + m_rand1->Rndm()*(__lowen_par_fraction_random)) );       
 
         //cout<<"const: "<<f->GetParameter(0)<<" mean: "<<f->GetParameter(1)<<" sigma: "<<f->GetParameter(2)<<" a: "<<f->GetParameter(3)<<" b: "<<f->GetParameter(4)<<" c: "<<f->GetParameter(5)<<" t: "<<f->GetParameter(6)<<endl;
-        
+        }
         
 	} else if ( TString(f->GetName()).Contains("gf_linear") ) {
 
@@ -283,7 +305,7 @@ vector<double> TOTCalib::LowStatsPeakSelection( vector<double> peaks,unsigned in
 
 	unsigned int i = 0;
 
-	if (m_verbose != __VER_QUIET){
+	if (m_verbose == __VER_DEBUG){
 		cout << "[INFO] ----- Low Stats Peak Selection -----" << endl;
 		cout << "Expected " << size << " peaks. | Peaks found : " ;
 		for (vector<double>::iterator k=peaks.begin(); k!=peaks.end() ; k++){ cout << (*k) << "  "; }
@@ -338,7 +360,7 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 	double minf;
 	double maxf;
 
-	if (src->GetCalibMethod() == __lowStats){ // optimized fit interval
+	if (src->GetPeakMethod() == __peakLowStats){ // optimized fit interval
 		minf = tot - 2*loc_bandwidth;
 		maxf = tot + 2*loc_bandwidth;
 
@@ -388,8 +410,8 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 	}
 	if(minf < 1) minf = 1; // correct for negative or zero minf value
 
-	TString fitconfig = "NQS";
-	if(m_verbose == __VER_DEBUG_LOOP) fitconfig = "NS";
+	TString fitconfig = "NQSW";
+	if(m_verbose == __VER_DEBUG_LOOP) fitconfig = "NSW";
 
 	// "N"  Do not store the graphics function, do not draw
 	// "R"  Use the Range specified in the function range
@@ -408,6 +430,7 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 
 	int status = -1, fittries = 0;
 	double sprob = 0.;
+	double max_sprob = -1;
 	int fit_max_rand_tries = 0;
 
 	// Save all the tries and if the limit __fit_pars_randomization_max is reached just pick up the best
@@ -415,17 +438,22 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 	map<int, vector<double> > calibTriesErrMap;
 	vector<double> calibTriesProb;
 	vector<int> calibTriesStatus;
+	vector<Int_t> chi2_tries;
 	int indexmax = 0; // Index of best fit
 	bool continueFitting = true;
+	Int_t chi2;
+	unsigned int sameChi2Max = 50; // will stop fitting if 50 tries gave same chi2; it is going nowhere
 
     Double_t a = 0.;
     Double_t b = 0.; 
     
     if (TString(f->GetName()).Contains("gf_lowe")) {
         if (sto->linearpairs.size() >= 2){
-            GetLinearFit(a,b,sto->linearpairs);        
-            if( m_verbose != __VER_QUIET ) {
+            GetLinearFit(a,b,sto->linearpairs);
+            //h->Rebin(2, "");        
+            if( m_verbose == __VER_DEBUG ) {
                 cout<< "[FIT] Using a and b coeff from linear region: a="<<a<<" and b="<<b<<endl;
+                cout<< "[FIT] Rebinning histogram to reduce optimization error." << endl;
             }
         }else{
             if( m_verbose != __VER_QUIET ) {
@@ -443,35 +471,61 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
         // keep track of the parameters to choose the better set in case the fit is not good enough
 
         if ( TString(f->GetName()).Contains("gf_lowe") ){
-           if (a!=0. && b!=0.){
-               f->FixParameter(1,energy);
-               f->FixParameter(3,a);
-               f->FixParameter(4,b);
-           }else {
-               f->FixParameter(1,energy); 
-           }
+        	
+        	f->FixParameter(1,energy);
+
+        	if (globalEstimationSuccess){ // following part is kind of ad hoc, values may be changed
+        		// sigma tends to be too small if fit doesn't converge fast enough
+        		f->SetParLimits(2, TMath::Max( (Double_t) 0., m_glob_sig.first-m_glob_sig.second*10 ), m_glob_sig.first+m_glob_sig.second*10 );
+        		
+        		if (a!=0. && b!=0.){
+        			f->SetParameter(3,a); //use linear fit instead of random parameters
+              		f->SetParameter(4,b);
+               		f->SetParLimits(3, TMath::Max( (Double_t) 0., a-m_glob_a.second*5) ,a+m_glob_a.second*5);
+               		f->SetParLimits(4, TMath::Max( (Double_t) 0., b-m_glob_b.second*5) ,b+m_glob_b.second*5);
+        		} else {
+        			f->SetParLimits(3, TMath::Max( (Double_t) 0., f->GetParameter(3)-m_glob_a.second*5) ,f->GetParameter(3)+m_glob_a.second*5); // cannot use linear fit
+               		f->SetParLimits(4, TMath::Max( (Double_t) 0., f->GetParameter(4)-m_glob_b.second*5) ,f->GetParameter(4)+m_glob_b.second*5); // but we use the global estimation 
+        		}
+
+        		
+
+        	} else{
+        		f->SetParLimits(0, h->GetMaximum()*0.4, h->GetMaximum()*1.6); // amplitude tends to be huge if fit doesn't converge fast enough
+        		if (a!=0. && b!=0.){ // cannot estimate boundaries
+        			f->FixParameter(3,a);
+              		f->FixParameter(4,b);
+        		}
+        	}
+        		
+        	if (m_calMethod==__calibJakubekAlt){
+        			f->SetParLimits(5, 0, m_e0_bound);
+					f->SetParLimits(6, 0, m_e0_bound);
+        		}
+
+        } else if (src->GetPeakMethod() == __peakLowStats){
+        	f->FixParameter(1,tot); // fix mean of the gaussian (otherwise incorrect fit in most cases)
+			f->SetParLimits(2,0, 1.5*loc_bandwidth); // set a max value for sigma (otherwise incorrect in most cases)
         }
 
 		fittries = 0; // rewind
 		status = -1;
-		while ( status != 0 && fittries < __max_fit_tries ) {
 		
-			if (src->GetCalibMethod() == __lowStats){
-				f->FixParameter(1,tot); // fix mean of the gaussian (otherwise incorrect fit in most cases)
-				f->SetParLimits(2,0, 1.5*loc_bandwidth); // set a max value for sigma (otherwise incorrect in most cases)
-			}
+		while ( status != 0 && fittries < __max_fit_tries ) {
+
 
 			TFitResultPtr fitr = h->Fit(f, fitconfig.Data(), "" , minf, maxf);
-			status = int ( fitr );
+			TFitResult * fitrp = fitr.Get();
+			status = fitrp->Status();
 			// special case where something very bad happens like trying to fit with empty data
 			if( status == -1 ) break;
 
 			// Get the stat prob of the fit
-			sprob = TMath::Prob( fitr.Get()->Chi2() / fitr.Get()->Ndf() , fitr.Get()->Ndf() );
+			sprob = TMath::Prob( fitrp->Chi2() , fitrp->Ndf() );
+			chi2 = TMath::Nint(fitrp->Chi2());
 
 			fittries++;
 		}
-
 		// special case where something very bad happens like trying to fit with empty data
 		if( status == -1 ) break;
 
@@ -482,18 +536,25 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 		calibTriesErrMap[fit_max_rand_tries] = vector<double>(f->GetNpar(), 0.);
 		calibTriesProb.push_back( sprob );
 		calibTriesStatus.push_back( status );
+		chi2_tries.push_back( chi2 );
+		if(sprob>max_sprob) max_sprob = sprob;
+
 		// Recover the resulting fit parameters
 		for(int i = 0 ; i < f->GetNpar() ; i++) {
 			calibTriesMap[fit_max_rand_tries][i] = f->GetParameter(i);
 			calibTriesErrMap[fit_max_rand_tries][i] = f->GetParError(i);
 		}
 
+		// count how many previous tries gave similar chi2 
+		unsigned int chi2Count = count(chi2_tries.begin(),chi2_tries.end(), chi2);
 		fit_max_rand_tries++;
 
 		// Decide wether we try another fit of not
-		if ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) { // keep trying if the minimum has not been reached up to a maximum number of tries
+		if (chi2Count >= sameChi2Max) {
+			continueFitting = false;
+		}else if ( max_sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) { // keep trying if the minimum has not been reached up to a maximum number of tries
 			continueFitting = true;
-		} else if ( sprob > __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_min) { // even if the minimum was found try a minimum number of times
+		} else if ( max_sprob > __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_min) { // even if the minimum was found try a minimum number of times
 			continueFitting = true;
 		} else { // otherwise stop
 			continueFitting = false;
@@ -613,14 +674,16 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 			
 			if ( (*EpointItr).second > 0. ){ // only fill graph if positive energy (the graph is used for surrogate fit in Blender)
             	constantfit = gf->GetParameter(0);
-				totmeanfit = gf->GetParameter(1);
+				
 				sigmafit = TMath::Abs ( gf->GetParameter(2) );
             	if ( TString(gf->GetName()).Contains("gf_lowe") ) {
             	    g->SetPoint(cntr, (*i).first, func_TOTatMax ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
             	    g->SetPointError(cntr, 0., sigmafit );
+            	    totmeanfit = totval; // parameter 1 is energy; however we need TOT at maximum to draw the surrogate later on
             	} else {
             	    g->SetPoint(cntr, (*i).first, totmeanfit ); // E, TOT (from the fit in this context)
             	    g->SetPointError(cntr, 0., sigmafit );
+            	    totmeanfit = gf->GetParameter(1);
             	}
 				
 				cntr++;
@@ -634,7 +697,7 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 			if( TString(gf->GetName()).Contains("gf_lowe") ) {  // in this case store the extra params
 				sto->pointsSave_ia.push_back( gf->GetParameter(3) );
 				sto->pointsSave_ib.push_back( gf->GetParameter(4) );
-				sto->pointsSave_ic.push_back( gf->GetParameter(5) );
+				sto->pointsSave_ic.push_back( gf->GetParameter(5) ); // either c or e0
 				sto->pointsSave_it.push_back( gf->GetParameter(6) );
 			} else {
 				sto->pointsSave_ia.push_back( 0. );
@@ -754,10 +817,7 @@ void TOTCalib::CreateGlobalKernelAndGetCriticalPoints(){
         }
 	vector<TOTCalib *>::iterator itr = m_allSources.begin();
 	for ( ; itr!=m_allSources.end() ; itr++){
-		
-		//int method = (*itr)->GetCalibMethod();
-		//if (method != __lowStats) continue;
-		
+
 		int nbins = (*itr)->GetNBins();
 
         vector<vector<double> > m_histo = (*itr)->Get_m_histo();
@@ -899,18 +959,21 @@ void TOTCalib::Blender (TOTCalib * s2, TString outputName, int calibMethod) {
 
 
 void TOTCalib::Blender (TString outputName, int calibMethod) {
-    
-    if (calibMethod==__jakubek){
-        cout<<"You have chosen the calibration method described in NIMPR A 633 (2011) S262–S266"<<endl;
+
+    m_calMethod = calibMethod;
+
+    if (m_calMethod==__calibJakubek || m_calMethod == __calibJakubekAlt){
+        cout<<"You have chosen the calibration method described in NIMPR A 633 (2011) S262-S266"<<endl;
         cout<<"You should have given one point in the low energy region and at least two points in the linear region."<<endl;
         cout<<"The a and b coeff will be determined by a fit in the linear region."<<endl;
         cout<<"The c and t coeff will be determined by a fit with the low energy function to the last spectrum in the order list."<<endl;
         cout<<"The threshold energy will be ignored, and no fit with the surrogate function will be done."<<endl; 
+        SetGlobalThresholdEnergyAndErr(0., 0.); // this indicates that threshold is ignored in calibration
     }
     
 	ReorderSources();
-	CreateGlobalKernelAndGetCriticalPoints(); // will only be used for sources with m_method == __lowStats
-    
+	CreateGlobalKernelAndGetCriticalPoints();
+
 	// Files to write
 	TString fn_a = outputName + "_a.txt";
 	TString fn_b = outputName + "_b.txt";
@@ -944,6 +1007,8 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 
 	m_gf_lowe_ZERO = new TF1("gf_lowe_ZERO", fitfunc_lowen_ZERO, 0., maxrange, __fitfunc_lowen_npars);
 	m_gf_lowe_ZERO->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
+
+	ParametersEstimation(m_calMethod); // must be placed after the definition of m_gf_lowe
 
 	double percentage = 0.;
 	// iterate over pixels
@@ -981,8 +1046,11 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 		if ( totalNPoints > 0 ) {
 
 			// Create an object with this points and perform a fit.  A TGraph.
-			g = new TGraphErrors(totalNPoints+1); //1 point for every peak expected + detector treshold
-
+			if (m_calMethod == __calibStandard){
+				g = new TGraphErrors(totalNPoints+1); //1 point for every peak expected + detector treshold
+			} else {
+				g = new TGraphErrors(totalNPoints); // no threshold point for this method (jakubek)
+			}
 			// Counter for points in TGraphErrors
 			int cntr = 0;
 
@@ -1007,7 +1075,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 			// Get the linear part to help the fit later
 			GetLinearFit( a, b, st->linearpairs );
 
-            if (calibMethod != __jakubek){
+            if (m_calMethod == __calibStandard){
                 
                 // Global threshold from THL calibration
                 g->SetPoint( cntr, m_thresholdEnergy, 0.0 );        // E = threshold_energy --> 0 TOT counts
@@ -1043,20 +1111,14 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 			m_calibPoints_ic[pix] = st->pointsSave_ic;
 			m_calibPoints_it[pix] = st->pointsSave_it;
 
-            if (calibMethod == __standard){
+            if (m_calMethod == __calibStandard){
                       
                 // [0] --> a
                 // [1] --> b
                 // [2] --> c
                 // [3] --> t
                 TF1 * surr = new TF1(fn, surrogatefunc_calib, m_thresholdEnergy, 60.0, 4); // range in keV, 4 parameters
-                //TF1 * surr = new TF1(fn, surrogatefunc_calib, 0.0, 60.0, 4); // range in keV, 4 parameters
-   // cout<<m_thresholdEnergy<<" "<<endl;
-    g->Print();
-                //surr->SetParameters( 1, 1, 100, 1 );
-                //surr->SetParLimits(2, 10, 250);
-                //surr->SetParLimits(3, 0.1, 5.0);
-                
+    			if (m_verbose == __VER_DEBUG_LOOP) g->Print();
                 // "N"  Do not store the graphics function, do not draw
                 // "R"  Use the Range specified in the function range
                 // "M"  More. Improve fit results.
@@ -1069,7 +1131,6 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                 double sprob = 0.0;
                 int fit_max_rand_tries = 0;
     
-    
                 while ( sprob < __min_tmathprobtest_val && fit_max_rand_tries < __fit_pars_randomization_max ) {
     
                     RandomFitParametersSurrogate( surr, a, b );
@@ -1081,7 +1142,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                         TFitResultPtr fitr = g->Fit(fn, fitconfig.Data(), "");
                         TFitResult * fitp = fitr.Get();
                         status = fitp->Status();
-                        sprob = TMath::Prob( surr->GetChisquare()/surr->GetNDF(), surr->GetNDF() );
+                        sprob = TMath::Prob( fitp->Chi2(), fitp->Ndf() );
                         initFit++;
     
                     }
@@ -1126,7 +1187,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                         cout<<"------- Calibration results -------"<<endl;
                         cout << "[MAX] Pixel = " << pix << " | best fit index = " << indexmax << " | prob = ";
                         cout << calibTriesProb[indexmax] << " | status : " << calibTriesStatus[indexmax];
-                        cout << " | a, b, c, t : ";
+                    	cout << " | a, b, c, t : "; 
                         cout << calibTriesMap[indexmax][0] << ", ";
                         cout << calibTriesMap[indexmax][1] << ", ";
                         cout << calibTriesMap[indexmax][2] << ", ";
@@ -1142,10 +1203,6 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                     surr_pars[3] = surr->GetParameter(3);
     
                 }
-    
-    
-                //cout << "Status : " << status << endl;
-                //cout << "p value of the fit : " << fitp->Prob() << endl;
     
                 // Save the fit constants
                 if( ( fit_max_rand_tries == __fit_pars_randomization_max && calibTriesStatus[indexmax] == 0 ) 	 // Fit which never reached the requested C.L.
@@ -1174,7 +1231,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                 // delete the function and TGraph
                 delete surr;
                                 
-            } else if (calibMethod == __jakubek){  // In this case no fit with surrogate is needed
+            } else {  // In this case no fit with surrogate is needed (jakubek method)
               
                 int size = st->pointsSave_ic.size();
                 
@@ -1190,7 +1247,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                     int position = 0;
                     for(st_itr = st->pointsSave_ic.begin() ; st_itr != st->pointsSave_ic.end() ; st_itr++ ) {
                         
-                        if ((*st_itr)!=0.){c = *st_itr; position = counter;}
+                        if ((*st_itr)>0.){c = *st_itr; position = counter;} //Note : if a low energy point is ignored, *st_itr will be set at -1
                         counter ++;
                     }
                     t = st->pointsSave_it.at(position);
@@ -1203,7 +1260,12 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                     
                     if (m_verbose !=__VER_QUIET) {
                         cout<<"------- Calibration results -------"<<endl;
-                        cout << "a, b, c, t : "<< a << ", "<< b << ", "<< c << ", "<< t << ", "<<endl;
+                        if (m_calMethod == __calibJakubekAlt){
+                        	cout << " | a, b, e0, t : ";
+                    	} else {
+                    		cout << " | a, b, c, t : "; 
+                    	}
+                        cout << a << ", "<< b << ", "<< c << ", "<< t << ", "<<endl;
                     }
                     
                 } else{
@@ -1218,7 +1280,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                 }
             }           
 
-		} else {
+		} else { // no data or impossible to fit
 
 			// This will get print and interrupt the progress bar
 			// ad a couple of extra endl
@@ -1258,38 +1320,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 			printProgBar( (int) percentage );
 		}
 
-		/*
-		cout << "Surrogate function for pixel " << pix << " has the following set of parameters (a,b,c,t) : "
-				<< m_calibConstants[pix][0] << ", "
-				<< m_calibConstants[pix][1] << ", "
-				<< m_calibConstants[pix][2] << ", "
-				<< m_calibConstants[pix][3] << endl;
-		 */
 
-		// Write to files
-		/*
-		f_a << m_calibSurrogateConstants[pix][0] << " ";
-		f_b << m_calibSurrogateConstants[pix][1] << " ";
-		f_c << m_calibSurrogateConstants[pix][2] << " ";
-		f_t << m_calibSurrogateConstants[pix][3] << " ";
-		f_prob << m_calibSurrogateProperties[pix][0] << " ";
-
-		if ( pix > 0 && pix % __matrix_width == 0 ) { // introduce a \n every 256 pixels
-			f_a << endl;
-			f_b << endl;
-			f_c << endl;
-			f_t << endl;
-			f_prob << endl;
-		}
-		 */
-		/* not used vv
-		// Store info for final histograms
-		m_par_a_v.push_back( m_calibSurrogateConstants[pix][0] );
-		m_par_b_v.push_back( m_calibSurrogateConstants[pix][1] );
-		m_par_c_v.push_back( m_calibSurrogateConstants[pix][2] );
-		m_par_t_v.push_back( m_calibSurrogateConstants[pix][3] );
-		m_surr_prob_v.push_back( calibTriesProb[indexmax] );
-		*/
 	}
 
 	// Send the whole matrix to the output files
@@ -1306,9 +1337,14 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 		if( pixout >= m_minpix && pixout <= m_maxpix && !PixelInBadPixelList(pixout) ) {
 			f_a << m_calibSurrogateConstants[pixout][0] << " ";
 			f_b << m_calibSurrogateConstants[pixout][1] << " ";
-			f_c << m_calibSurrogateConstants[pixout][2] << " ";
 			f_t << m_calibSurrogateConstants[pixout][3] << " ";
 			f_prob << m_calibSurrogateProperties[pixout][0] << " ";
+			if( m_calMethod == __calibJakubekAlt){ // new parametrization
+				vector<double> vc = m_calibSurrogateConstants[pixout];
+				f_c << (vc[0]*vc[2]+vc[1]) * (vc[2]-vc[3]) << " ";
+			} else { // standard parameters
+				f_c << m_calibSurrogateConstants[pixout][2] << " ";
+			}
 		} else {
 			f_a << '0' << " ";
 			f_b << '0' << " ";
@@ -1316,7 +1352,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 			f_t << '0' << " ";
 			f_prob << '0' << " ";
 		}
-
+						
 	}
 
 
@@ -1332,6 +1368,143 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 	f_prob.close();
 
 }
+
+
+void TOTCalib::ParametersEstimation(int calMethod){
+	// Guess initial value for a,b,c,t (or a,b,e0,t) parameters from the global spectra
+
+	if (calMethod == __calibStandard) {globalEstimationSuccess=false; return;} // no estimation to do
+
+	vector<TOTCalib *>::iterator sour = m_allSources.begin();
+	vector<pair<double,double> > linPoints;
+
+	for( ; sour != m_allSources.end(); sour++){ // similar to PeakFit() and ProcessOneSource()
+
+		double loc_bandwidth = (*sour)->GetKernelBandWidth();
+		vector<double> tot_v = (*sour)->GetGlobalMaximumPoints();
+		vector<double>::iterator tot = tot_v.begin();
+
+		map<int, int> region = (*sour)->GetCalibHandler()->GetCalibPointsRegion();
+		map<int, int>::iterator regionItr = region.begin();
+   	 
+		map<int, double> Epoint = (*sour)->GetCalibHandler()->GetCalibPoints(); // energies in this vector may be < 0 (to skip)
+		map<int, double>::iterator EpointItr = Epoint.begin();
+
+		if (Epoint.size() != tot_v.size()){
+			cout << "[ERROR] " << (*sour)->GetCalibHandler()->GetSourcename() << ": The expected number of peaks is not equal to the number of maximums in the global kernel function!" <<endl;
+			cout << "Try to work with more pixels in your next run." << endl;
+			continue ; // ignore this source for the estimation
+		}
+
+		// I won't make the gaussian fits, I will only use the kernel's maximums to estimate a and b
+		// then I will fit Jakubek's function on the low energy spectrum
+		for( ; EpointItr!= Epoint.end() ; EpointItr ++){
+			if ( (*EpointItr).second < 0 ) {regionItr++; tot++; continue;}
+
+			if ( (*regionItr).second == CalibHandler::__linear_reg ){
+				linPoints.push_back( make_pair( (*EpointItr).second, *tot) );
+				regionItr++; tot++;
+
+			}
+
+			else if ( (*regionItr).second == CalibHandler::__lowenergy_reg ){
+				if (linPoints.size() < 2){
+					cout << "[ERROR] There are not enough linear points to estimate the surrogate parameters." << endl;
+					globalEstimationSuccess = false;
+					return; // What should we do?
+				}
+
+				if(m_e0_bound == 0.) m_e0_bound = (*EpointItr).second;
+				double a = 0; double b = 0;
+				GetLinearFit(a, b, linPoints); // first, estimate a and b
+				TF1 * gf = FittingFunctionSelector((*EpointItr).second, *sour, (*EpointItr).first);
+				vector<double> hist_v = (*sour)->GetGlobalHisto();
+				vector<double>::iterator i;
+
+				TH1I * hf = new TH1I("ParameterEstimation", "ParameterEstimation", hist_v.size(), 0, hist_v.size());
+				int cntr = 0;
+				for(i = hist_v.begin(); i!=hist_v.end(); i++){
+					hf->SetBinContent(hf->FindBin(cntr), *i);
+					cntr++;
+				}
+				hf->Rebin(2, ""); // optimal fit
+
+				double minf = 1.;
+				double maxf = 3*loc_bandwidth + (*tot);
+				gf->SetParameter(0, hf->GetBinContent(hf->FindBin(*tot)));
+
+				gf->FixParameter(1, (*EpointItr).second);
+				gf->SetParameter(2, loc_bandwidth/5);
+				gf->SetParameter(3, a);
+				gf->SetParameter(4, b);
+
+				gf->SetParLimits(3, 0, 10*a);
+				gf->SetParLimits(4, 0, 10*b);
+
+				if (m_calMethod == __calibJakubekAlt){
+					if(m_e0_bound == 0.) m_e0_bound = (*EpointItr).second;
+					gf->SetParameter(5, m_e0_bound*0.8);
+					gf->SetParameter(6, m_e0_bound /2);
+	
+					gf->SetParLimits(5, 0, m_e0_bound);
+					gf->SetParLimits(6, 0, m_e0_bound); // LOWER BOUND 0?
+				} else {
+					gf->SetParameter(5, b*2);
+					gf->SetParameter(6, (*EpointItr).second /2);
+				}
+
+				int fittries = 0; // rewind
+				int status = -1;
+				while ( status != 0 && fittries < __max_fit_tries ) {
+		
+		
+					TFitResultPtr fitr = hf->Fit(gf, "NQS", "" , minf, maxf);
+					TFitResult * fitp = fitr.Get();
+					status = fitp->Status();
+					// special case where something very bad happens like trying to fit with empty data
+					if( status == -1 ) break;
+					double sprob = TMath::Prob( fitp->Chi2(), fitp->Ndf());
+
+					if(m_verbose != __VER_QUIET){
+						cout << "Global spectrum fit : Chi2=" << fitp->Chi2() << "| Prob="<<sprob << endl;
+						for (int param =0; param < 7; param++){
+							cout << "p" << param << " = " << gf->GetParameter(param) << "+/-" << gf->GetParError(param) <<"  |  " ;
+						}
+						cout <<endl;
+					}
+					fittries++;
+				}
+
+				if (status == -1){
+					cout << "[ERROR] Cannot estimate surrogate parameters. Giving up..." << endl;
+					globalEstimationSuccess = false;
+					return; // What should we do?
+				}
+				
+				//The fit gives an initial value for the parameters
+				m_glob_const = make_pair(gf->GetParameter(0)/(m_maxpix-m_minpix+1), gf->GetParError(0)/(m_maxpix-m_minpix+1) );
+				m_glob_sig = make_pair(gf->GetParameter(2), gf->GetParError(2) );
+				m_glob_a = make_pair(gf->GetParameter(3), gf->GetParError(3) );
+				m_glob_b = make_pair(gf->GetParameter(4), gf->GetParError(4) );
+				m_glob_t = make_pair(gf->GetParameter(6), gf->GetParError(6) );
+				if (m_calMethod == __calibJakubekAlt){
+					m_glob_e0 = make_pair(gf->GetParameter(5), gf->GetParError(5) );
+					m_glob_c = make_pair(0.,0.);
+				} else {
+					m_glob_c = make_pair(gf->GetParameter(5), gf->GetParError(5) );
+					m_glob_e0 = make_pair(0.,0.);
+				}
+
+				break;
+			}
+
+
+		}
+		globalEstimationSuccess = true;
+		
+	}
+}
+
 
 void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_c, TString file_t){
 
@@ -1947,20 +2120,21 @@ void TOTCalib::GetCoeffFromFiles(double *tab_a, double *tab_b, double *tab_c, do
 }
 
 
+
 TF1 * TOTCalib::FittingFunctionSelector(double /*E*/, TOTCalib * s, int pointIndex){
 
 	// Assume linear first
 	TF1 * g = m_gf_linear;
 
-	//// E in keV
-	//if(E < 10.0) { g = m_gf_lowe; }
-
 	// Pull out the calibration handler and check if a different funcion is needed
 	CalibHandler * ch = s->GetCalibHandler();
 	map<int, int> regions = ch->GetCalibPointsRegion();
-	if ( regions[pointIndex] == CalibHandler::__lowenergy_reg ) g = m_gf_lowe_ZERO; // new parametrization fully replaces previous method
 
-	//cout << "[" << pointIndex << "] " << regions[pointIndex] << endl;
+	if ( regions[pointIndex] == CalibHandler::__lowenergy_reg ) {
+		if (m_calMethod == __calibJakubekAlt) g = m_gf_lowe_ZERO;
+		else g = m_gf_lowe;
+	}
+
 
 	return g;
 }
@@ -1975,21 +2149,41 @@ void TOTCalib::Finalize(){
 	// prepare output ROOT
 	TString rootName = m_outputName + ".root";
 	m_output_root = new TFile(rootName.Data(), "RECREATE");
-	TTree *tsurr = new TTree("surrogateFunction","surrogateFunction"); // will contain vectors of the surrogate parameters
+	TTree * tsurr = new TTree("surrogateFunction","surrogateFunction"); // will contain vectors of the surrogate parameters
 	
 	// first, a tree for the surrogate function
 	map<int, vector<double> > surr_p;
 	map<int, int> surr_status;
+	int calibration_method;
 	tsurr->Branch("parameters", "map<int, vector<double> >", &surr_p,bsize, split);
 	tsurr->Branch("status","map<int, int>", &surr_status,bsize, split);
+	tsurr->Branch("calibMethod", &calibration_method);
 
 	surr_p =  m_calibSurrogateConstants;
 	surr_status = m_surrogateStatus;
+	calibration_method = m_calMethod;
 
 	tsurr->Fill();
 	tsurr->Write();
 
-	TTree *tparam = new TTree("parameters", "parameters");
+	if (GetParametersEstimationStatus()){
+		vector<double> estim = GetParametersEstimation();
+		vector<double> estim_err = GetParametersEstimationErrors();
+		unsigned int i;
+		double p_estim;
+		double p_estim_err;
+		TTree * t_est = new TTree("globalParametersEstim","globalParametersEstim");
+		t_est->Branch("globEstimation", &p_estim);
+		t_est->Branch("globEstError", &p_estim_err);
+		for (i=0; i<estim.size(); i++){
+			p_estim = estim[i];
+			p_estim_err = estim_err[i];
+			t_est->Fill();
+		}
+		t_est->Write();
+	}
+
+	TTree * tparam = new TTree("parameters", "parameters");
 	vector<TOTCalib *>::iterator i;
 	map<int, vector< pair<double, double> > > points; //energy&mean
 	map<int, vector<double> > sigmas;
@@ -2034,22 +2228,25 @@ void TOTCalib::Finalize(){
 	vector< vector<double> > spectrum;
 	map<int, double> CHpoints; // points defined in calib handler object
 	map<int, int> CHregions; // regions defined in calib handler object
-	map<int, vector<double> > max; // identified peaks (required by DrawFullPixelCalib)
+	map<int, vector<double> > k_max; // identified peaks (required by DrawFullPixelCalib)
+	int peakMethod;
 
 	for(i = m_allSources.begin() ; i != m_allSources.end() ; i++ ) {
 		TString sname = (*i)->GetCalibHandler()->GetSourcename();
-		TTree *tsour = new TTree(sname.Data(),sname.Data());
+		TTree * tsour = new TTree(sname.Data(),sname.Data());
 		tsour->Branch("spectrumVec", "vector <vector<double> >", &spectrum, bsize,split);
 		tsour->Branch("points", "map<int, double>", &CHpoints, 32000,split);
 		tsour->Branch("regions", "map<int, int>", &CHregions, 32000,split);
-		tsour->Branch("maximums", "map<int, vector<double> >", &max, bsize, split);
+		tsour->Branch("maximums", "map<int, vector<double> >", &k_max, bsize, split);
 		tsour->Branch("bandwidth", &bandwidth);
+		tsour->Branch("peakMethod", &peakMethod);
 
 	 	spectrum = (*i)->Get_m_histo();
 	 	CHpoints = (*i)->GetCalibHandler()->GetCalibPoints();
 	 	CHregions = (*i)->GetCalibHandler()->GetCalibPointsRegion();
-		max = (*i)->GetMaxPeaksIdentified();
+		k_max = (*i)->GetMaxPeaksIdentified();
 	 	bandwidth = (*i)->GetKernelBandWidth();
+	 	peakMethod = (*i)->GetPeakMethod();
 	 	tsour->Fill();
 		tsour->Write("", TObject::kOverwrite);
 	}
@@ -2087,8 +2284,8 @@ TF1 * TOTCalib::GetSurrogateFunction(int pix) {
 	//first check which parametrization was used (standard or low energy)
 	vector<TOTCalib *>::iterator i = m_allSources.begin();
 	map<int, int>::iterator reg_i;
-	bool e0_parametrization = false;
-	for( ; i != m_allSources.end() ; i++ ) {
+	//bool e0_parametrization = false;
+	/*for( ; i != m_allSources.end() ; i++ ) {
 		map<int, int> reg = (*i)->GetCalibHandler()->GetCalibPointsRegion();
 		reg_i = reg.begin();
 		for ( ; reg_i != reg.end() ; reg_i++ ) {
@@ -2097,7 +2294,7 @@ TF1 * TOTCalib::GetSurrogateFunction(int pix) {
             	break;
             }
 		}
-	}
+	}*/
 
 
 	vector<double> vc = m_calibSurrogateConstants[pix];
@@ -2107,15 +2304,11 @@ TF1 * TOTCalib::GetSurrogateFunction(int pix) {
 	fn += pix;
 	TF1 * surr = new TF1(fn, "[0]*x + [1] - ([2]/(x - [3]))", 0., 100.); // range in keV // FIX 
 
-	if (e0_parametrization){
-		cout << "Request of surrogate function for pixel " << pix << " with parameters (treshold parametrization) : "
-			<< vc[0] << ", " << vc[1] << ", " << vc[2] << ", " << vc[3] << endl;
-			// vc[2] is the treshold, not the c parameter
-			surr->SetParameters(vc[0], vc[1], (vc[0]*vc[2]+vc[1]) * (vc[2]-vc[3]) , vc[3]);
+	if (m_calMethod == __calibJakubekAlt){ 
+		surr->SetParameters(vc[0], vc[1], (vc[0]*vc[2]+vc[1]) * (vc[2]-vc[3]) , vc[3]);
 	} else {
-		cout << "Request of surrogate function for pixel " << pix << " with parameters (standard parametrization) : "
-			<< vc[0] << ", " << vc[1] << ", " << vc[2] << ", " << vc[3] << endl;
-			surr->SetParameters(vc[0], vc[1], vc[2] , vc[3]);
+		surr->SetParameters(vc[0], vc[1], vc[2] , vc[3]);
+
 	}
 
 	return surr;
@@ -2210,7 +2403,7 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 
 	// If this situation is present determine which peaks to remove
 	// remove as many as necesary
-	if (s->GetCalibMethod() == __lowStats && peaks.size()> calibPoints.size() ) peaks = LowStatsPeakSelection(peaks, calibPoints.size(), s, loc_bandwidth); // better peak selection
+	if (s->GetPeakMethod() == __peakLowStats && peaks.size()> calibPoints.size() ) peaks = LowStatsPeakSelection(peaks, calibPoints.size(), s, loc_bandwidth); // better peak selection
 	while( peaks.size() > calibPoints.size() ) { // regular peak selection, should probably be modified
 		TH1I * th = s->GetHisto(pix, "spectrum");
 		vector<double> integ;
@@ -2715,7 +2908,7 @@ void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int 
 	m_nbins = maxtot;
 	m_histoRebinning = m_nbins; //m_nbins/8;
 	m_nFrames = nFrames;
-	m_method = method;
+	m_peakMethod = method;
 
 	// File
 	TFile * f = new TFile(fn);
@@ -3088,8 +3281,11 @@ void TOTCalib::DrawFullPixelCalib(int pix) {
             
             if( TString(gf->GetName()).Contains("gf_lowe") ) {
 
-                cout << "Constant: "<< fit_const[orderCntr] << ", " << "Mean: " <<fit_mean[orderCntr].first << ", " <<"Sigma: "<< fit_sigmas[orderCntr] << ", ";
-                cout <<"a: "<< fit_ia[orderCntr] << ", " <<"b: "<< fit_ib[orderCntr] << ", " <<"c: "<< fit_ic[orderCntr] << ", " <<"t: "<< fit_it[orderCntr];
+            	cout << "Constant: "<< fit_const[orderCntr] << ", " << "Mean: " <<fit_mean[orderCntr].first << ", " <<"Sigma: "<< fit_sigmas[orderCntr] << ", ";
+            	cout <<"a: "<< fit_ia[orderCntr] << ", " <<"b: "<< fit_ib[orderCntr] << ", " ;
+            	if (GetCalibMethod() == __calibJakubekAlt) {cout << "e0: ";}
+            	else{cout << "c: ";}
+            	cout << fit_ic[orderCntr] << ", " <<"t: "<< fit_it[orderCntr];
 
             }else{
 
@@ -3155,18 +3351,25 @@ void TOTCalib::DrawFullPixelCalib(int pix) {
 		for(int i = 0 ; i < g->GetN() ; i++) xm_v.push_back(xm[i]);
 		double maxel_x = *max_element( xm_v.begin(), xm_v.end() );
 		//s->GetXaxis()->SetRangeUser( 0., maxel_x*1.1 );
+		
 
 		TLatex * l2 = new TLatex();
 		TString parS;
 		int npar = s->GetNpar();
 		for(int i = 0 ; i < npar ; i++) {
 			parS = "";
-			if ( i == 0 ) parS = "a = ";
-			if ( i == 1 ) parS = "b = ";
-			if ( i == 2 ) parS = "c = ";
-			if ( i == 3 ) parS = "t = ";
+			if ( i == 0 ) parS = "a  = ";
+			if ( i == 1 ) parS = "b  = ";
+			if ( i == 2 ) parS = "c  = ";
+			if ( i == 3 ) parS = "t  = ";
 			parS += TString::Format("%.2f"/* +/- %.2f*/, s->GetParameter(i)/*, s->GetParError(i) */); 	// error on fit parameters is not computed
 			l2->DrawLatex(maxel_x/2, maxel_y * (1 - (i/10.)), parS); 									// maybe add soon?
+		}
+
+		if (m_calMethod == __calibJakubekAlt){
+			parS = "e0 = ";
+			parS += TString::Format("%.2f", m_calibSurrogateConstants[pix][2]); // this is the threshold
+			l2->DrawLatex(maxel_x/2, maxel_y * (1 - (4/10.)), parS); 
 		}
 
 		//
@@ -3198,12 +3401,12 @@ TGraphErrors * TOTCalib::GetCalibGraph(int pix){
 
 		}
 	}
-	
+
 	if (m_thresholdEnergy > 0.){ // will be 0 for jakubek calibration method
 		g->SetPoint( cntr, m_thresholdEnergy, 0.0 );
 		g->SetPointError(cntr, m_thresholdEnergy_Err, 0.0 );
 	}
-	
+
 	return g;
 }
 
@@ -3247,8 +3450,8 @@ CalibHandler::CalibHandler (string source) {
 
 		// Fe-55
 		// Energy, Intensity
-		// XR kα2	     5.888	      8.2 % 4 	  4.85E-4 21
-		// XR kα1	     5.899	     16.2 % 7 	  9.6E-4 4
+		// XR ka2	     5.888	      8.2 % 4 	  4.85E-4 21
+		// XR ka1	     5.899	     16.2 % 7 	  9.6E-4 4
 		m_calibPoints[0] = 5.899;  // Fe-55 5.899 KeV
 		m_calibPointsRegion[0] = __lowenergy_reg;
 		//m_calibPointsRegion[0] = __linear_reg;
@@ -3275,20 +3478,7 @@ CalibHandler::CalibHandler (string source) {
         m_calibPoints[1] = 23.1; // K-alpha peak of Cd 
         m_calibPointsRegion[1] = __linear_reg;
 
-    } else if ( ! TString(source).CompareTo( "Cu_fluo", TString::kIgnoreCase )
-			||
-			! TString(source).CompareTo( "Cu-fluo", TString::kIgnoreCase )
-			||
-			! TString(source).CompareTo( "Cufluo", TString::kIgnoreCase )
-			||
-			! TString(source).CompareTo( "Cu", TString::kIgnoreCase )
-	) {
-
-		// Fluorescence  8.05 keV
-		m_calibPoints[0] = 8.05; //
-		m_calibPointsRegion[0] = __lowenergy_reg;
-
-	} else if ( ! TString(source).CompareTo( "Am241CutLow_Plus_SnFluo", TString::kIgnoreCase )
+    } else if ( ! TString(source).CompareTo( "Am241CutLow_Plus_SnFluo", TString::kIgnoreCase )
 			||
 			! TString(source).CompareTo( "Am241CutLow-Plus-SnFluo", TString::kIgnoreCase )
 	) {
@@ -3347,7 +3537,28 @@ CalibHandler::CalibHandler (string source) {
     	// Fluorescence Zn
 		m_calibPoints[0] = 8.64; // kev
 		m_calibPointsRegion[0] = __linear_reg; // could be __lownenergy_reg in some cases
-    }
+    } else if ( ! TString(source).CompareTo( "Cd_fluo_TPXGaAs", TString::kIgnoreCase )
+    ) {
+        
+        m_calibPoints[0] = 10.5; // K-alpha peak of As
+        m_calibPointsRegion[0] = __linear_reg;
+        m_calibPoints[1] = 23.1; // K-alpha peak of Cd 
+        m_calibPointsRegion[1] = __linear_reg;
+
+    } else if ( ! TString(source).CompareTo( "Cu_fluo", TString::kIgnoreCase )
+			||
+			! TString(source).CompareTo( "Cu-fluo", TString::kIgnoreCase )
+			||
+			! TString(source).CompareTo( "Cufluo", TString::kIgnoreCase )
+			||
+			! TString(source).CompareTo( "Cu", TString::kIgnoreCase )
+	) {
+
+		// Fluorescence  8.05 keV
+		m_calibPoints[0] = 8.05; //
+		m_calibPointsRegion[0] = __lowenergy_reg;
+
+	}
 
 	cout << " and contains " << m_calibPoints.size() << " calibration point(s)" << endl;
 
@@ -3393,7 +3604,7 @@ double surrogatefunc_calib(double * x, double * par) {
 
 double fitfunc_lowen(double * x, double * par) {
 
-    // Function proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+    // Function proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262�S266
 
     // independent var
     Double_t xx = x[0]; // TOT
@@ -3448,7 +3659,9 @@ double surrogatefunc_calib_ZERO(double * x, double * par) {
 
 double fitfunc_lowen_ZERO(double * x, double * par) {
 
+
     // Function proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+
     // New parametrization -> Use the threshold as a parameter (instead of c)
 
     // independent var

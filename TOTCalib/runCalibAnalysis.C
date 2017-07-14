@@ -39,15 +39,13 @@ void DrawFullPixelCalib(int,int);
 void DrawSurrogate(int);
 void DrawSurrogate(int,int);
 void DrawStatusMap();    
-void DrawParameterMap(string);
+void DrawParameterMap(TString);
 void DrawSpectrum(int,int,TString);    
 void DrawSpectrum(int,TString);        
-double surrogatefunc_cal(double*,double*);
-double surrogatefunc_calib_ZERO(double *, double *);  // New parametrization
-double fitfunc_lowen(double *, double *);
-double fitfunc_lowen_ZERO(double *, double *);  	  // New parametrization
 void DrawGlobalSpectrum(TString);
 Int_t GetMinimumNonEmptyBin(TH2D *);
+Int_t CountProcessedPixels();
+
 
 
 R__LOAD_LIBRARY(libTOTCalib.so);
@@ -91,9 +89,28 @@ void LoadFile(TString s){
 
 	map<int, vector<double> > * surr_p = 0;
 	map<int, int> *surr_status = 0;
+	int calibration_method;
+
 	tsurr->SetBranchAddress("parameters", &surr_p);
 	tsurr->SetBranchAddress("status", &surr_status);
+	tsurr->SetBranchAddress("calibMethod", &calibration_method);
 	tsurr->GetEntry(0); // this TTree has a single entry
+	
+	vector< double > v_estim;
+	vector< double > v_err;
+	double p_estim;
+	double p_estim_err;
+	if (f->GetListOfKeys()->Contains("globalParametersEstim") ){ // tree exists
+		TTree * t_est = (TTree*) f->Get("globalParametersEstim");
+		t_est->SetBranchAddress("globEstimation", &p_estim);
+		t_est->SetBranchAddress("globEstError", &p_estim_err);
+		int entries = t_est->GetEntries();
+		for (int k = 0; k<entries; k++){
+			t_est->GetEntry(k);
+			v_estim.push_back(p_estim);
+			v_err.push_back(p_estim_err);
+		}
+	}
 
 	map<int, vector< pair<double, double> > > * points = 0; //energy and mean
 	map<int, vector<double> > * sigmas = 0;
@@ -119,8 +136,13 @@ void LoadFile(TString s){
 
 	// Dump variables into calib
 	tparam->GetEntry(0); // this TTree has a single entry
-	calib-> DumpCalibParametersFromSavedFile(*points, *sigmas, *constants, *calibPoints_ia, *calibPoints_ib, *calibPoints_ic, *calibPoints_it, *surr_p, *surr_status);
+	calib-> DumpCalibParametersFromSavedFile(*points, *sigmas, *constants, *calibPoints_ia, *calibPoints_ib,
+					 *calibPoints_ic, *calibPoints_it, *surr_p, *surr_status, calibration_method);
 	calib-> SetGlobalThresholdEnergyAndErr((*thres).first, (*thres).second);
+	if (!v_estim.empty()){
+		calib->DumpParametersEstimation(v_estim,v_err);
+	}
+
 	
 	// Create sub-TOTCalib objects from TTrees
 	vector<TString>::iterator it;
@@ -129,6 +151,8 @@ void LoadFile(TString s){
 	map<int, double> *CHpoints = 0; // points defined in calib handler object
 	map<int, int> *CHregions = 0; // regions defined in calib handler object
 	map<int, vector<double> > *max = 0; // identified peaks (required by DrawFullPixelCalib)
+	int peakMethod;
+
 	double bandwidth;
 
 	for (it = (*sn).begin(); it != (*sn).end(); it++){
@@ -139,13 +163,14 @@ void LoadFile(TString s){
 		tsour->SetBranchAddress("regions", &CHregions);
 		tsour->SetBranchAddress("points", &CHpoints);
 		tsour->SetBranchAddress("maximums", &max);
-		tsour -> GetEntry(0); // this TTree has a single entry
+		tsour->SetBranchAddress("peakMethod", &peakMethod);
+		tsour->GetEntry(0); // this TTree has a single entry
 
 		tempSource = new TOTCalib();
 		tempSource -> SetKernelBandWidth(bandwidth);
 		tempSource -> DumpSpectrumVectorFromSavedFile(*spectrum);
 		tempSource -> CreateCalibHandlerFromSavedFile( (*it) );
-		tempSource -> DumpSourceInfoFromSavedFile(*CHpoints, *CHregions, *max);
+		tempSource -> DumpSourceInfoFromSavedFile(*CHpoints, *CHregions, *max, peakMethod);
 
 		calib->AddSingleSourceFromSavedFile(tempSource);
 
@@ -218,12 +243,20 @@ void DrawSurrogate(int pix){ // from DrawFullPixelCalib
 	int npar = s->GetNpar();
 	for(int i = 0 ; i < npar ; i++) {
 		parS = "";
-		if ( i == 0 ) parS = "a = ";
-		if ( i == 1 ) parS = "b = ";
-		if ( i == 2 ) parS = "c = ";
-		if ( i == 3 ) parS = "t = ";
+
+		if ( i == 0 ) parS = "a  = ";
+		if ( i == 1 ) parS = "b  = ";
+		if ( i == 2 ) parS = "c  = ";
+		if ( i == 3 ) parS = "t  = ";
+
 		parS += TString::Format("%.2f"/* +/- %.2f*/, s->GetParameter(i)/*, s->GetParError(i) */); 	// error on fit parameters is not computed
 		l2->DrawLatex(maxel_x/2, maxel_y * (1 - (i/10.)), parS); 
+	}
+
+	if (calib->GetCalibMethod() == TOTCalib::__calibJakubekAlt){
+		parS = "e0 = ";
+		parS += TString::Format("%.2f", calib->GetSurrogateParamMap()[pix][2]); // this is the threshold
+		l2->DrawLatex(maxel_x/2, maxel_y * (1 - (4/10.)), parS); 
 	}
 
 	c1->Update();
@@ -271,15 +304,28 @@ void DrawStatusMap(){
 	h->GetZaxis()->SetRangeUser(-2,1);
 }
 
-void DrawParameterMap(string p){
+void DrawParameterMap(TString p){
 	int index =-1;
 	if (p == "a") {index = 0;}
 	else if (p == "b"){index = 1;}
 	else if (p == "c"){index = 2;}
 	else if (p == "t"){index = 3;}
-	else {
+	else if (p == "e0"){
+		if ( calib->GetCalibMethod()==TOTCalib::__calibJakubekAlt){
+			index = 2;
+		}else{
+			cout << "[ERROR] Parameter e0 not computed in your calibration." << endl;
+			cout << "        Please use one of the following parameters: a, b, c, t." << endl;
+		return;
+		} 
+	}
+	else if (calib->GetCalibMethod()==TOTCalib::__calibJakubekAlt){
 		cout << "[ERROR] Parameter " << p << " unrecognized."<< endl;
-		cout << "        Please use one of the following parameters: a, b, c, t." << endl;
+		cout << "        Please use one of the following parameters: a, b, c, t, e0." << endl;
+		return;
+	} else{
+		cout << "[ERROR] Parameter " << p << " unrecognized."<< endl;
+		cout << "        Please use one of the following parameters: a, b, c, t" << endl;
 		return;
 	}
 
@@ -307,7 +353,11 @@ void DrawParameterMap(string p){
 		if (v.empty()){
 			h->SetBinContent(pix_xy.first+1, pix_xy.second+1, 0.);	//binID has to have +1 because there is no bin/row/column 0
 		} else{
-			h->SetBinContent(pix_xy.first+1, pix_xy.second+1, v[index]);
+			if (p=="c" && calib->GetCalibMethod()==TOTCalib::__calibJakubekAlt){
+				h->SetBinContent(pix_xy.first+1, pix_xy.second+1, (v[0]*v[2]+v[1]) * (v[2]-v[3]) ); // converts e0 to c
+			} else {
+				h->SetBinContent(pix_xy.first+1, pix_xy.second+1, v[index]);
+			}
 		}
 	}
 	c1->cd();
@@ -462,7 +512,10 @@ void DrawSpectrum(int pix, TString s){
          if( TString(gf->GetName()).Contains("gf_lowe") ) {
 
              cout << "Constant: "<< fit_const[orderCntr] << ", " << "Mean: " <<fit_mean[orderCntr].first << ", " <<"Sigma: "<< fit_sigmas[orderCntr] << ", ";
-             cout <<"a: "<< fit_ia[orderCntr] << ", " <<"b: "<< fit_ib[orderCntr] << ", " <<"c: "<< fit_ic[orderCntr] << ", " <<"t: "<< fit_it[orderCntr];
+             cout <<"a: "<< fit_ia[orderCntr] << ", " <<"b: "<< fit_ib[orderCntr] << ", " ;
+             if (calib->GetCalibMethod() == TOTCalib::__calibJakubekAlt) {cout << "e0: ";}
+             else{cout << "c: ";}
+             cout << fit_ic[orderCntr] << ", " <<"t: "<< fit_it[orderCntr];
 
          }else{
 
@@ -491,6 +544,7 @@ void DrawSpectrum(int pix, TString s){
 
 // Chi2 map is irrelevent in most cases : error on the surrogate function if often miscalculated
 // and a few pixels may have a huge chi2 if one of the source is close to the divergence point
+
 /*void DrawChiSquareMap(){
 	TString cname = "ChiSquare_map";
 	TString ctitle = "Surrogate fit - Chi2";
@@ -537,119 +591,6 @@ void DrawSpectrum(int pix, TString s){
 	h->GetZaxis()->SetRangeUser(h->GetBinContent(GetMinimumNonEmptyBin(h)), h->GetBinContent(h->GetMaximumBin()));
 }*/
 
-
-double surrogatefunc_calib(double * x, double * par) {
-
-	// independent var
-	double xx = x[0];
-
-	// pars
-	double a = par[0];
-	double b = par[1];
-	double c = par[2];
-	double t = par[3];
-
-	double func = a * xx + b;
-	func -= ( c / ( xx - t) );
-
-	return func;
-}
-
-
-double surrogatefunc_calib_ZERO(double * x, double * par) {
-	 // New parametrization -> Use the threshold as a parameter (instead of c)
-
-	// independent var
-	double xx = x[0];
-
-	// pars
-	double a = par[0];
-	double b = par[1];
-	double e0 = par[2];
-	double t = par[3];
-
-	if (t >= e0) return -1.0e6; // divergent point must be lower than pixel's threshold
-
-	double c = (a*e0+b)*(e0-t);
-
-	double func = a * xx + b;
-	func -= ( c / ( xx - t) );
-
-	return func;
-}
-
-double fitfunc_lowen_ZERO(double * x, double * par) {
-
-    // Function proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
-    // New parametrization -> Use the threshold as a parameter (instead of c)
-
-    // independent var
-    Double_t xx = x[0]; // TOT
-
-    // parameters for gaussian
-    Double_t gconst = par[0];
-    Double_t mean = par[1];
-    Double_t sigma = par[2];
-
-    // surrogate ^ -1
-    Double_t a = par[3];
-    Double_t b = par[4];
-    Double_t e0 = par[5];
-    Double_t t = par[6];
-
-    if (t >= e0) return -1.0e6; // divergent point must be lower than pixel's threshold
-
-    Double_t c = (a*e0+b)*(e0-t);
-    // Inverse of the surrogate ( = energy in keV)
-    Double_t surrogate_inverse, delta, num1, num2, denum;
-    delta = TMath::Power((b-a*t-xx),2) - 4 * a * (xx*t-c-b*t);
-    num1 = a*t + xx - b;
-    num2 = TMath::Sqrt(delta) ;
-    denum = 2 * a;
-    surrogate_inverse = (num1 +  num2) / denum;
-
-    // Gaussian of the inversed surrogate
-    Double_t arg = (surrogate_inverse - mean)/sigma;
-    Double_t func = gconst * TMath::Exp(-0.5*arg*arg);
-
-    return func;
-}
-
-double fitfunc_lowen(double * x, double * par) {
-
-    // Function proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
-
-    // independent var
-    Double_t xx = x[0]; // TOT
-
-    // parameters for gaussian
-    Double_t gconst = par[0];
-    Double_t mean = par[1];
-    Double_t sigma = par[2];
-
-    // surrogate ^ -1
-    Double_t a = par[3];
-    Double_t b = par[4];
-    Double_t c = par[5];
-    Double_t t = par[6];
-
-    // Inverse of the surrogate ( = energy in keV)
-    Double_t surrogate_inverse, delta, num1, num2, denum;
-    delta = TMath::Power((b-a*t-xx),2) - 4 * a * (xx*t-c-b*t);
-    num1 = a*t + xx - b;
-    num2 = TMath::Sqrt(delta) ;
-    denum = 2 * a;
-    surrogate_inverse = (num1 +  num2) / denum;
-
-    // Gaussian of the inversed surrogate
-    Double_t arg = (surrogate_inverse - mean)/sigma;
-    Double_t func = gconst * TMath::Exp(-0.5*arg*arg);
-
-    return func;
-}
-
-
-
 void DrawGlobalSpectrum(TString s){
 
 
@@ -687,12 +628,53 @@ void DrawGlobalSpectrum(TString s){
 	TH1I * h = new TH1I(s+"_glob", s+"_global", v.size(), 0, v.size());
 	int cntr = 0;
 	for(i = v.begin(); i!=v.end(); i++){
-		h->Fill(cntr, *i);
+		h->SetBinContent(h->FindBin(cntr), *i);
 		cntr++;
 	}
+
 	h->GetXaxis()->SetTitle("TOT");
 	h->GetYaxis()->SetTitle("entries");
+	h->Rebin(2,"");
 	h->Draw("hist");
+
+	//if Jakubek method was used and the parameters estimated
+	if (calib->GetParametersEstimationStatus()){
+		TF1 * gf;
+		map<int, double> calibPoints = source->GetCalibHandler()->GetCalibPoints();
+		map<int, int> calibRegion = source->GetCalibHandler()->GetCalibPointsRegion();
+		int nCalibPoints = (int)calibPoints.size();
+		for(int p = 0 ; p < nCalibPoints ; p++) {
+			if (calibRegion[p] !=CalibHandler::__lowenergy_reg) continue;
+
+			gf = calib->FittingFunctionSelector( calibPoints[p], source, p );
+			vector< double > v_estim = calib->GetParametersEstimation();
+			vector< double > v_err = calib->GetParametersEstimationErrors();
+			gf->SetParameter( 0, v_estim[0] * CountProcessedPixels() );	    gf->SetParError( 0, v_err[0] * CountProcessedPixels() );	
+			gf->SetParameter( 1, calibPoints[p]); 							gf->SetParError( 1, 0);		
+			gf->SetParameter( 2, v_estim[1] );    							gf->SetParError( 2, v_err[1] );		
+		    gf->SetParameter( 3, v_estim[2] );    							gf->SetParError( 3, v_err[2] );		
+		    gf->SetParameter( 4, v_estim[3] );    							gf->SetParError( 4, v_err[3] );		
+		    gf->SetParameter( 6, v_estim[5] );    							gf->SetParError( 6, v_err[5] );		
+		    if (calib->GetCalibMethod()==TOTCalib::__calibJakubekAlt){
+		    	gf->SetParameter( 5, v_estim[6] );							gf->SetParError( 5, v_err[6] );
+			} else {
+				gf->SetParameter( 5, v_estim[4]);							gf->SetParError( 5, v_err[4] );
+			}
+		
+			gf->Draw("same");
+    		c1->Update();
+
+    		cout << "Global estimation of calibration parameters gave the following results : " << endl;
+    		cout << "Constant = " << gf->GetParameter(0) << "+/-" <<  gf->GetParError(0) << " | Energy = " << gf->GetParameter(1) << "+/-" <<  gf->GetParError(1);
+    		cout << " | Sigma = " << gf->GetParameter(2) << "+/-" <<  gf->GetParError(2) << " | a = " <<gf->GetParameter(3) << "+/-" <<  gf->GetParError(3);
+    		cout << " | b = " <<gf->GetParameter(4) << "+/-" <<  gf->GetParError(4);
+    		if (calib->GetCalibMethod()==TOTCalib::__calibJakubekAlt) {cout << " | e0 = ";} else {cout << " |c = ";}
+    		cout << gf->GetParameter(5) << "+/-" <<  gf->GetParError(5) << " | t = " << gf->GetParameter(6) << "+/-" <<  gf->GetParError(6) << endl;
+     		break;
+        }
+
+    	    	
+	}
 
 }
 
@@ -706,11 +688,24 @@ Int_t GetMinimumNonEmptyBin(TH2D *h){
 	for(int i = 1; i <= nbinsX; i++){
 		for(int j =1 ; j <= nbinsY; j++){
 			double content = h->GetBinContent(i,j);
-			if((content > 0 && content < min_content) || min_content < 0){
+			if((content > 0 && content < min_content) || (content > 0 && min_content < 0) ){
 				min_content = content;
 				minX = i; minY = j;
 			}
 		}
 	}
 	return h->GetBin(minX,minY);
+}
+
+Int_t CountProcessedPixels(){
+	int size = calib->GetMatrixSize();
+	map<int, int> status = calib->GetSurrogateStatusMap();
+
+	int it;
+	Int_t pixCount = 0;
+	for (it = 0; it < size; it++){
+		if (status.find(it) != status.end()) pixCount++;
+	}
+
+	return pixCount;
 }
