@@ -197,6 +197,12 @@ public :
 	void Blender(TOTCalib * s2, TString outputName, int = 0);
 	void Blender(TString, int = 0);
 
+    void SavePixelResolution(TString = "", TString = "", TString = "", TString = "");
+    void GetCoeffFromFiles(double *, double *, double *, double *, const char *, const char *, const char *, const char *, int, int);
+    void GetCuadraticSolutions(pair<int,int>, int, double &, double &, double &, double *, double *, double *, double *);
+    double GetE(pair<int,int>, int tot, double *, double *, double *, double *);
+    TH1I *GetHistoCalibrated(int, TString, double, double *, double *, double *, double *);
+    
 	void ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
 	void ReorderSources();
 
@@ -291,6 +297,7 @@ public :
 		m_maxpix = status.rbegin()->first;
 		m_minpix = status.begin()->first;
 		m_calMethod = calibMethod;
+
 	};
 
 	void DumpSpectrumVectorFromSavedFile(	vector< vector<double> > spectrum){

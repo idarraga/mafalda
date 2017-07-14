@@ -47,6 +47,7 @@ Int_t GetMinimumNonEmptyBin(TH2D *);
 Int_t CountProcessedPixels();
 
 
+
 R__LOAD_LIBRARY(libTOTCalib.so);
 
 void runCalibAnalysis (  ) {
@@ -89,6 +90,7 @@ void LoadFile(TString s){
 	map<int, vector<double> > * surr_p = 0;
 	map<int, int> *surr_status = 0;
 	int calibration_method;
+
 	tsurr->SetBranchAddress("parameters", &surr_p);
 	tsurr->SetBranchAddress("status", &surr_status);
 	tsurr->SetBranchAddress("calibMethod", &calibration_method);
@@ -150,6 +152,7 @@ void LoadFile(TString s){
 	map<int, int> *CHregions = 0; // regions defined in calib handler object
 	map<int, vector<double> > *max = 0; // identified peaks (required by DrawFullPixelCalib)
 	int peakMethod;
+
 	double bandwidth;
 
 	for (it = (*sn).begin(); it != (*sn).end(); it++){
@@ -240,10 +243,12 @@ void DrawSurrogate(int pix){ // from DrawFullPixelCalib
 	int npar = s->GetNpar();
 	for(int i = 0 ; i < npar ; i++) {
 		parS = "";
+
 		if ( i == 0 ) parS = "a  = ";
 		if ( i == 1 ) parS = "b  = ";
 		if ( i == 2 ) parS = "c  = ";
 		if ( i == 3 ) parS = "t  = ";
+
 		parS += TString::Format("%.2f"/* +/- %.2f*/, s->GetParameter(i)/*, s->GetParError(i) */); 	// error on fit parameters is not computed
 		l2->DrawLatex(maxel_x/2, maxel_y * (1 - (i/10.)), parS); 
 	}
@@ -585,7 +590,6 @@ void DrawSpectrum(int pix, TString s){
 	h->Draw("colz same"); // must draw twice to set the right color palette
 	h->GetZaxis()->SetRangeUser(h->GetBinContent(GetMinimumNonEmptyBin(h)), h->GetBinContent(h->GetMaximumBin()));
 }*/
-
 
 void DrawGlobalSpectrum(TString s){
 

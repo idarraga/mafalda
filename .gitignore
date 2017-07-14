@@ -10,3 +10,7 @@ TOTCalib/TOTCalibDict*
 *.creator
 *.config
 *.files
+*creator.user
+
+// MacOs
+*.DS_Store
