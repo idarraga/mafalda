@@ -1687,6 +1687,7 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
            br_int_pixID = pix;
            br_int_selectedpeak_ID = peak_for_histos;
            br_TF1_KernelFunction = kf;
+           br_double_fitstatus = st->peakFitStatus;
            tree->Fill();
            if (br_TH1_spectrum) delete br_TH1_spectrum;
            if (br_TH1_spectrum_calibrated) delete br_TH1_spectrum_calibrated;
