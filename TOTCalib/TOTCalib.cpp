@@ -609,6 +609,7 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
             	status = PeakFit(s, pix, totval, gf, hf, sto, (*i).first);
         	}else{
             	status = PeakFit(s, pix, totval, gf, hf, sto);
+
        		}
 			if(m_verbose == __VER_DEBUG) cout << " { status : " << status << " } ";
 			Double_t func_TOTatMax = gf->GetMaximumX();
@@ -1348,6 +1349,8 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
     vector<double> br_double_sigmafit;
     vector<double> br_double_totmeanfit;
     vector<double> br_double_constantfit;
+    vector<double> br_double_Chi2fit;
+    vector<double> br_double_NDFfit;    
     vector<double> br_double_afit;
     vector<double> br_double_bfit;
     vector<double> br_double_cfit;
@@ -1363,6 +1366,8 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
     tree->Branch("FitSigma", &br_double_sigmafit);
     tree->Branch("FitMean", &br_double_totmeanfit);
     tree->Branch("FitConstant", &br_double_constantfit);
+    tree->Branch("FitChi2", &br_double_Chi2fit);
+    tree->Branch("FitNDF", &br_double_NDFfit);    
     tree->Branch("Fita", &br_double_afit);
     tree->Branch("Fitb", &br_double_bfit);
     tree->Branch("Fitc", &br_double_cfit);
@@ -1481,6 +1486,8 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
             }            
             
             int calibPointIterator = 0;
+            br_double_Chi2fit.clear();
+            br_double_NDFfit.clear();
             for ( i = points.begin() ; i != points.end(); i++ ) {
         
                 // Make the fit around the peak
@@ -1500,6 +1507,8 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
                     }else{
                         status = PeakFit(s, pix, totval, gf, hf,st);
                     }
+                    br_double_Chi2fit.push_back(gf->GetChisquare());
+                    br_double_NDFfit.push_back(gf->GetNDF());
                     
                     //Double_t func_TOTatMax = gf->GetMaximumX();   
                     totmeanfit = gf->GetParameter(1);
@@ -1616,7 +1625,7 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
        br_double_bfit.clear();
        br_double_cfit.clear();
        br_double_tfit.clear(); 
-       br_double_fitstatus.clear();              
+       br_double_fitstatus.clear();
        if (calib_required){
            br_double_constantfit_calibrated.clear();           
            br_double_totmeanfit_calibrated.clear();
@@ -2544,6 +2553,7 @@ TH1I * TOTCalib::GetHisto(int pix, TString extraName){
 	int cntr = 0;
 	for ( ; i != hist.end() ; i++) {
 		h->Fill(cntr, *i);
+        h->SetBinError(cntr,TMath::Sqrt(h->GetBinContent(cntr)));
 		cntr++;
 	}
 

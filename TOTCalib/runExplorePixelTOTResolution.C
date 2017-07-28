@@ -67,6 +67,8 @@ void runExplorePixelTOTResolution()
     vector<double> *br_double_sigmafit=0;
     vector<double> *br_double_totmeanfit=0;
     vector<double> *br_double_constantfit=0;
+    vector<double> *br_double_Chi2fit=0;
+    vector<double> *br_double_NDFfit=0;    
     vector<double> *br_double_afit=0;
     vector<double> *br_double_bfit=0;
     vector<double> *br_double_cfit=0;
@@ -80,6 +82,8 @@ void runExplorePixelTOTResolution()
     T->SetBranchAddress("FitSigma",&br_double_sigmafit);
     T->SetBranchAddress("FitMean",&br_double_totmeanfit);
     T->SetBranchAddress("FitConstant",&br_double_constantfit);
+    T->SetBranchAddress("FitChi2",&br_double_Chi2fit);
+    T->SetBranchAddress("FitNDF",&br_double_NDFfit);    
     T->SetBranchAddress("Fita",&br_double_afit);
     T->SetBranchAddress("Fitb",&br_double_bfit);
     T->SetBranchAddress("Fitc",&br_double_cfit);
@@ -150,7 +154,7 @@ void runExplorePixelTOTResolution()
     // First, draw histogram and kernel function  (stored in root file)
     hpx->GetXaxis()->SetTitle("TOT");
     hpx->GetYaxis()->SetTitle("Counts");    
-    hpx->Draw("HIST");
+    hpx->Draw();
     kernel_func->Draw("same");
     kernel_func->SetLineColor(kBlack);
     kernel_func->SetLineStyle(2);
@@ -167,7 +171,20 @@ void runExplorePixelTOTResolution()
            fit_func->SetParameter( 1, br_double_totmeanfit->at(i) );
            fit_func->SetParameter( 2, br_double_sigmafit->at(i));
            if (i==selectedPeakID) {
-               fit_func->SetLineColor(kGreen);
+                fit_func->SetLineColor(kGreen);
+                double chi2 = br_double_Chi2fit->at(i);
+                TString chi2_str = to_string(chi2);
+                double NDF = br_double_NDFfit->at(i);
+                TString NDF_str = to_string(NDF);
+                TString str = "Chi2/NDF: "+chi2_str+" / "+NDF_str;                
+                TText *t = new TText(.5,.5,str);
+                //t->SetTextAlign(22);
+                t->SetTextFont(43);
+                t->SetTextSize(20);
+                t->SetTextColor(kGreen);
+                t->SetBBoxCenterX(300);
+                t->SetBBoxCenterY(100);                
+                t->Draw();
            }else{
                fit_func->SetLineColor(kRed);
            }
