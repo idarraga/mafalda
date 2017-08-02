@@ -66,6 +66,7 @@ void runExplorePixelTOTResolution()
     TF1 *kernel_func = 0;
     vector<double> *br_double_sigmafit=0;
     vector<double> *br_double_totmeanfit=0;
+    vector<double> *br_double_totmeanfitError=0;
     vector<double> *br_double_constantfit=0;
     vector<double> *br_double_Chi2fit=0;
     vector<double> *br_double_NDFfit=0;    
@@ -81,6 +82,7 @@ void runExplorePixelTOTResolution()
     T->SetBranchAddress("Kernel_Function",&kernel_func);
     T->SetBranchAddress("FitSigma",&br_double_sigmafit);
     T->SetBranchAddress("FitMean",&br_double_totmeanfit);
+    T->SetBranchAddress("FitMeanError",&br_double_totmeanfitError);
     T->SetBranchAddress("FitConstant",&br_double_constantfit);
     T->SetBranchAddress("FitChi2",&br_double_Chi2fit);
     T->SetBranchAddress("FitNDF",&br_double_NDFfit);    
@@ -176,13 +178,15 @@ void runExplorePixelTOTResolution()
                 TString chi2_str = to_string(chi2);
                 double NDF = br_double_NDFfit->at(i);
                 TString NDF_str = to_string(NDF);
-                TString str = "Chi2/NDF: "+chi2_str+" / "+NDF_str;                
+                double fitmeanError = br_double_totmeanfitError->at(i);
+                TString MeanError_str = to_string(fitmeanError);                
+                TString str = "Chi2/NDF: "+chi2_str+" / "+NDF_str+" --- Mean error: "+MeanError_str;                
                 TText *t = new TText(.5,.5,str);
                 //t->SetTextAlign(22);
                 t->SetTextFont(43);
                 t->SetTextSize(20);
                 t->SetTextColor(kGreen);
-                t->SetBBoxCenterX(300);
+                t->SetBBoxCenterX(200);
                 t->SetBBoxCenterY(100);                
                 t->Draw();
            }else{

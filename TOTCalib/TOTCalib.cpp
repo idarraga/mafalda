@@ -553,7 +553,7 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 	//status = -1;
 	//}
 
-
+    //cout<<"chi2/ndf: "<<f->GetChisquare()<<" / "<<f->GetNDF()<<endl<<"Mean error: "<<f->GetParError(1)<<endl;
 	return status;
 }
 
@@ -1348,6 +1348,7 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
     TF1 *br_TF1_KernelFunction = 0;
     vector<double> br_double_sigmafit;
     vector<double> br_double_totmeanfit;
+    vector<double> br_double_totmeanfitError;
     vector<double> br_double_constantfit;
     vector<double> br_double_Chi2fit;
     vector<double> br_double_NDFfit;    
@@ -1364,7 +1365,8 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
     tree->Branch("Histo_Spectrum", "TH1I", &br_TH1_spectrum, bsize,split);
     tree->Branch("Kernel_Function", "TF1", &br_TF1_KernelFunction, bsize,split);
     tree->Branch("FitSigma", &br_double_sigmafit);
-    tree->Branch("FitMean", &br_double_totmeanfit);
+    tree->Branch("FitMeanError", &br_double_totmeanfitError);
+    tree->Branch("FitMean", &br_double_totmeanfit);    
     tree->Branch("FitConstant", &br_double_constantfit);
     tree->Branch("FitChi2", &br_double_Chi2fit);
     tree->Branch("FitNDF", &br_double_NDFfit);    
@@ -1488,6 +1490,7 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
             int calibPointIterator = 0;
             br_double_Chi2fit.clear();
             br_double_NDFfit.clear();
+            br_double_totmeanfitError.clear();
             for ( i = points.begin() ; i != points.end(); i++ ) {
         
                 // Make the fit around the peak
@@ -1507,14 +1510,16 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
                     }else{
                         status = PeakFit(s, pix, totval, gf, hf,st);
                     }
-                    br_double_Chi2fit.push_back(gf->GetChisquare());
-                    br_double_NDFfit.push_back(gf->GetNDF());
-                    
+
                     //Double_t func_TOTatMax = gf->GetMaximumX();   
                     totmeanfit = gf->GetParameter(1);
                     constantfit = gf->GetParameter(0);
                     sigmafit = TMath::Abs ( gf->GetParameter(2) ); 
     
+                    // Save fit results
+                    br_double_Chi2fit.push_back(gf->GetChisquare());
+                    br_double_NDFfit.push_back(gf->GetNDF());
+                    br_double_totmeanfitError.push_back(gf->GetParError(1));
                     if( TString(gf->GetName()).Contains("gf_lowe") ) {  // in this case store the extra params
                        st->pointsSave_ia.push_back( gf->GetParameter(3) );
                        st->pointsSave_ib.push_back( gf->GetParameter(4) );
@@ -2191,7 +2196,7 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 		} else {
 			// Otherwise remove the first one
             if (m_verbose != __VER_QUIET){ 
-                cout << " | first item removed ";
+                cout << " | first item removed "<<endl;
 			}
 			peaks.erase( peaks.begin() );
 		}
