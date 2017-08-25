@@ -1780,6 +1780,7 @@ TH1D * TOTCalib::GetHistoCalibrated(int pix, TString extraName, double energymax
         Double_t energy = GetE(pixel,cntr,m_a,m_b,m_c,m_t);
         
 		h->Fill(energy, *i);
+        h->SetBinError(energy,TMath::Sqrt(h->GetBinContent(energy)));
         
         //cout.precision(3);
         //cout<<"---> tot: "<<cntr<<" Counts: "<<*i<<endl;

@@ -229,7 +229,7 @@ void runExplorePixelTOTResolution()
         // First, draw histogram and kernel function  (stored in root file)
         hpx_calibrated->GetXaxis()->SetTitle("Energy (keV)");
         hpx_calibrated->GetYaxis()->SetTitle("Counts"); 
-        hpx_calibrated->Draw("HIST");
+        hpx_calibrated->Draw();
         
         // Secondly, draw fit functions (from parameters stored in root file)
         TF1 *fit_func_calibrated = new TF1("gf_linear", "gaus(0)", 0.,hpx->GetNbinsX());
