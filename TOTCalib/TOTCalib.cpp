@@ -1642,12 +1642,15 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
        if (!(st->pointsSaveSigmas.empty()) && !(st->pointsSaveConstants.empty())){ //check if at least one fit succeded
 
            // Loop on all peaks, store fit results and select the one with highest amplitude
-           double selected_point_amplitude = 0.;
+           //double selected_point_amplitude = 0.;
+           double selected_point_totmeanfit = 0.;           
            Int_t peak_for_histos = 0;
            for(int p = 0 ; p < nCalibPoints ; p++) {
 
-               if (st->pointsSaveConstants.at(p)>selected_point_amplitude){
-                   selected_point_amplitude = st->pointsSaveConstants.at(p);
+               //if (st->pointsSaveConstants.at(p)>selected_point_amplitude){
+               if ( (st->pointsSave.at(p)).second > selected_point_totmeanfit){             
+                   //selected_point_amplitude = st->pointsSaveConstants.at(p);
+                   selected_point_totmeanfit = (st->pointsSave.at(p)).second;                   
                    peak_for_histos=p;
                }
 
