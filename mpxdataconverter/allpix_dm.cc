@@ -1371,21 +1371,14 @@ Bool_t FramesHandler::ProcessMultiframe(TString datafile, TString dscfile, TStri
 	Char_t * METAtemp;
 	METAtemp = new char[META_DATA_LINE_SIZE];
 
-	while ( META_filestr.good() ) {
+    // Read first line : should be "A000001000"
+    if (META_filestr.good()) {META_filestr.getline(METAtemp, META_DATA_LINE_SIZE);}
+        else {cout<<"[WARNING: anormal dsc file: METADATA might be corrupted] "<<endl;}
 
-		META_filestr.getline(METAtemp, META_DATA_LINE_SIZE);
-		if(m_ParseAndHold) parseMetaLine((TString)METAtemp, nLineMetaFile); // pass currentLine
+    // Read second line : should be F[0], need to get rid of it due to following algos
+    if (META_filestr.good()) {META_filestr.getline(METAtemp, META_DATA_LINE_SIZE);}
+        else {cout<<"[WARNING: anormal dsc file: METADATA might be corrupted] "<<endl;}
 
-		if(nLineMetaFile++ == m_metaBit){
-
-			//cout << METAtemp << endl;
-			m_aFrame->FillMetaData((TString)METAtemp, m_metaCode);
-			m_ParseAndHold = true;
-
-		}
-
-	}
-	META_filestr.close();
 	///////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -1444,7 +1437,7 @@ Bool_t FramesHandler::ProcessMultiframe(TString datafile, TString dscfile, TStri
 
 			if(newframe) {
 
-				//cout << "Filling frame " << cntr << endl;
+                //cout << "Filling frame " << cntr << endl;
 
 				// now read the dictionary and fill the matrix
 				for ( it=frameMap.begin() ; it != frameMap.end(); it++ ) {
@@ -1457,10 +1450,34 @@ Bool_t FramesHandler::ProcessMultiframe(TString datafile, TString dscfile, TStri
 				SetnY(m_height);
 				m_aFrame->SetId(cntr);
 
+                //************* METADATA *******************
+                Bool_t metafile_endofframe = false;
+                while (!metafile_endofframe && META_filestr.good()){
+
+                    META_filestr.getline(METAtemp, META_DATA_LINE_SIZE);
+
+                    if(m_ParseAndHold) parseMetaLine((TString)METAtemp, nLineMetaFile); // pass currentLine
+
+                    if(nLineMetaFile++ == m_metaBit){
+
+                        m_aFrame->FillMetaData((TString)METAtemp, m_metaCode);
+                        m_ParseAndHold = true;
+
+                    }
+
+                    if (METAtemp[0]=='[' && METAtemp[1]=='F'){
+
+                        metafile_endofframe = true;
+
+                    }
+
+                }
+                //*******************************************
+
 				// clean map
 				frameMap.clear();
 				// finally fill vars
-				wte->fillVars(this, false); // second parameters tells not to rewind metadata
+                wte->fillVars(this, false); // second parameters tells not to rewind metadata
 				// ready to read next
 				newframe = false;
 				cntr++;
@@ -1544,6 +1561,30 @@ Bool_t FramesHandler::ProcessMultiframe(TString datafile, TString dscfile, TStri
 				SetnY(m_height);
 				m_aFrame->SetId(cntr);
 
+                //************* METADATA *******************
+                Bool_t metafile_endofframe = false;
+                while (!metafile_endofframe && META_filestr.good()){
+
+                    META_filestr.getline(METAtemp, META_DATA_LINE_SIZE);
+
+                    if(m_ParseAndHold) parseMetaLine((TString)METAtemp, nLineMetaFile); // pass currentLine
+
+                    if(nLineMetaFile++ == m_metaBit){
+
+                        m_aFrame->FillMetaData((TString)METAtemp, m_metaCode);
+                        m_ParseAndHold = true;
+
+                    }
+
+                    if (METAtemp[0]=='[' && METAtemp[1]=='F'){
+
+                        metafile_endofframe = true;
+
+                    }
+
+                }
+                //*******************************************
+
 				// clean map
 				frameMap.clear();
 				// finally fill vars
@@ -1560,6 +1601,27 @@ Bool_t FramesHandler::ProcessMultiframe(TString datafile, TString dscfile, TStri
 			ftype == (FSAVE_BINARY | FSAVE_I16 | FSAVE_SPARSEXY) ||
 			ftype == (FSAVE_BINARY | FSAVE_U32 | FSAVE_SPARSEXY)
 	) {
+
+        //************* METADATA *******************
+        // TO FIX: I don't know if dsc file is the same format in binary,
+        // so here is just the old treatment of dsc file (does not take into
+        // account start time of each frame in a multiframe dsc file)
+        while ( META_filestr.good()) {
+
+            META_filestr.getline(METAtemp, META_DATA_LINE_SIZE);
+            if(m_ParseAndHold) parseMetaLine((TString)METAtemp, nLineMetaFile); // pass currentLine
+
+            if(nLineMetaFile++ == m_metaBit){
+
+                //cout << METAtemp << endl;
+                m_aFrame->FillMetaData((TString)METAtemp, m_metaCode);
+                m_ParseAndHold = true;
+
+            }
+
+        }
+        //*******************************************
+
 
 		// 2 := I16, 4 := U32
 		int nCountBytes = 2;
@@ -1645,6 +1707,8 @@ Bool_t FramesHandler::ProcessMultiframe(TString datafile, TString dscfile, TStri
 	}
 
 	//cout << "[INFO] Multiframe ... " << cntr << " frames processed" << endl;
+
+    META_filestr.close();
 
 	return true;
 }
