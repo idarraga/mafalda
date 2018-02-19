@@ -744,7 +744,8 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, ROOT::Math::Wrapp
     // -------------------------------------------------------
     // ---- Creating the input fit data
     ROOT::Fit::DataOptions opt;
-    ROOT::Fit::BinData data(opt);
+    ROOT::Fit::DataRange range(1,maxf);
+    ROOT::Fit::BinData data(opt,range);
     ROOT::Fit::FillData(data, h);
     
     // ---- Creating the Fit model
@@ -753,15 +754,14 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, ROOT::Math::Wrapp
     fitter.SetFunction(*fitFunction, false); 
 
     // ---- Fit Configuration
-    fitter.Config().SetMinimizer("GSLMultiFit");
-//    cout<<fitter.Config().MinimizerType()<<endl;
-    fitter.Config().MinimizerOptions().SetPrintLevel(0);
-    fitter.Config().MinimizerOptions().SetMaxFunctionCalls(100);
-    fitter.Config().MinimizerOptions().SetMaxIterations(100);    
+    fitter.Config().SetMinimizer("Minuit","Simplex");
+    //fitter.Config().MinimizerOptions().SetPrintLevel(3);
+    //fitter.Config().MinimizerOptions().SetMaxFunctionCalls(1);
+    //fitter.Config().MinimizerOptions().SetMaxIterations(100);
     // --> With Fitter class    
-    fitter.Config().ParSettings(0).SetValue(h->GetMaximum()*0.4); // constant   
-    fitter.Config().ParSettings(1).SetValue(10.); // sigma 
-    fitter.Config().ParSettings(2).SetValue(200.); // c   
+    fitter.Config().ParSettings(0).SetValue(h->GetMaximum()*0.4); // constant
+    fitter.Config().ParSettings(1).SetValue(10.); // sigma
+    fitter.Config().ParSettings(2).SetValue(200.); // c
     fitter.Config().ParSettings(3).SetValue(1.);   // t
     fitter.Config().ParSettings(4).Set("e1",e1);   
     fitter.Config().ParSettings(5).Set("s1",s1);   
@@ -789,7 +789,7 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, ROOT::Math::Wrapp
     //ROOT::Fit::FitResult result;
     TFitResult result;
     result = fitter.Result();
-    //result.Print();
+    if(m_verbose <= __VER_INFO) {result.Print();}
     // --> With TF1 class    
 //    Double_t c = f->GetParameter(2);
 //    Double_t c_error = f->GetParError(2);    
@@ -800,9 +800,6 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, ROOT::Math::Wrapp
 //    TFitResult * fitrp = fitr.Get();
 //    status = fitrp->Status();
     // -------------------------------------------------------
-
-    // save the status
-	sto->peakFitStatus.push_back( status );
 
 	return status;
 }
@@ -938,15 +935,10 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 void TOTCalib::ProcessOneSource2_gaussian(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr) {
 
 	// Sets of points
-	vector< pair<double, double> > points = Extract_E_TOT_Points2 ( pix, s ) ; // energies in this vector are in absolute value (for peak order)
+    // energies in this vector are in absolute value (for peak order)
+    // Should be only one element in this vector
+    vector< pair<double, double> > points = Extract_E_TOT_Points2 ( pix, s ) ;
     vector<pair<double, double> >::iterator i;
-
-	// region type, linear, low energy, undefined
-	map<int, int> region = s->GetCalibHandler()->GetCalibPointsRegion();
-	map<int, int>::iterator regionItr = region.begin();
-
-	// The selected fitting function.  Do not delete in this scope !
-	TF1 * gf;
 
 	// Obtain the histogram for this pixel
 	int totval = 0, status = -1;
@@ -957,14 +949,14 @@ void TOTCalib::ProcessOneSource2_gaussian(TOTCalib * s, store * sto, TGraphError
 
 	if(m_verbose == __VER_DEBUG) {cout << "After Fit, points for : " <<  s->GetCalibHandler()->GetSourcename() <<  "  |  ";}
 
-	int calibPointIterator = 0;
 	for ( i = points.begin() ; i != points.end(); i++ ) {
 
 		// Make the fit around the peak
 		totval = (*i).second;
 
-		// Select the appropiated function
-		gf = m_gf_linear;
+        // The selected fitting function.
+        TF1 * gf = new TF1("gf_linear", "gaus(0)", 0., s->GetNBins());
+        gf->SetParameters(1, 1, m_bandwidth);
 
 		if (totval >=0){ // totval will be -1 if not enough peaks were identified
 
@@ -996,8 +988,7 @@ void TOTCalib::ProcessOneSource2_gaussian(TOTCalib * s, store * sto, TGraphError
 
 		if(m_verbose == __VER_DEBUG) {cout << " (" << (*i).first << " , " << totmeanfit << ") ";}
         
-        regionItr++;
-		calibPointIterator++;
+        delete gf;
 	}
     
 	if(m_verbose == __VER_DEBUG) cout << endl;
@@ -1010,6 +1001,7 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
 	vector< pair<double, double> > points = Extract_E_TOT_Points ( pix, s ) ; // energies in this vector are in absolute value (for peak order)    
     vector<pair<double, double> >::iterator i = points.begin();
     double tot_at_max_kernel = (*i).second;
+    double energy_keV = (*i).first;
             
     // Initialize variables to be stored in the "store" structure 
     double a = -1;
@@ -1021,52 +1013,57 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
     int status = -1; //will still try to fit the surrogate w/o this source (unless they all have -1 status)    
     double func_TOTatMax = -1;
     
-    map<int, double> Epoint = s->GetCalibHandler()->GetCalibPoints(); // energies in this vector may be < 0 (to skip)
-    map<int, double>::iterator EpointItr = Epoint.begin();
- 
-    // region type, linear, low energy, undefined
-    map<int, int> region = s->GetCalibHandler()->GetCalibPointsRegion();
-    map<int, int>::iterator regionItr = region.begin();
-    
     // The data histogram
     TH1I * hf = s->GetHisto(pix, "blender");
     
-    TF1 * gf = new TF1("gf_lowe", fitfunc_lowen2, 0., 150., __fitfunc_lowen_npars2);
-    gf->SetParameters(1, 1, m_bandwidth, 1,1,1,1,1,1);    
     if ((tot_at_max_kernel >= 0) && (points.size()==1)){ // totval will be -1 if not enough peaks were identified
 
-        // The selected fitting function.  Do not delete in this scope !
-        //TF1 * gf = m_gf_lowe;
-      
-        ROOT::Math::WrappedMultiTF1 fitFunction(*gf, gf->GetNdim() );        
+        TF1 * gf = new TF1("gf_lowe", fitfunc_lowen2, 0.,s->GetNBins(),9);
+        gf->SetParameters(5,10,100,1,1,1,1,1,1); // cont, sigma, c, t, e1, s1, e2, s2, energy_keV
+        ROOT::Math::WrappedMultiTF1 fitFunction(*gf, gf->GetNdim() );
     
         if(m_verbose == __VER_DEBUG) {
             cout << "After Fit, points for : " <<  s->GetCalibHandler()->GetSourcename() <<  "  |  ";
         }
                     
         // Fit in the peak
-        status = PeakFit2_lowen(s, pix, tot_at_max_kernel, &fitFunction, hf, sto, (*i).first);
+        status = PeakFit2_lowen(s, pix, tot_at_max_kernel, &fitFunction, hf, sto, energy_keV);
 
         // Retrieve fitted parameters
         c = gf->GetParameter(2);
         t = gf->GetParameter(3);
         constantfit = gf->GetParameter(0);
         sigmafit = TMath::Abs (gf->GetParameter(1));
-        func_TOTatMax = gf->GetMaximumX();            
 
         // Calculate a and b from the low energy fit result
         double e1 = (sto->linearpairs.at(0)).first;
         double s1 = (sto->linearpairs.at(0)).second;
         double e2 = (sto->linearpairs.at(1)).first;
         double s2 = (sto->linearpairs.at(1)).second;
+        if(m_verbose <= __VER_INFO) {cout<<"--> Calculating a and b from fit results"<<endl;}
         pair<double,double> pair_ab = Calculate_ab_From_ct_e1s1_e2s2(c,t,e1,s1,e2,s2);
         a = pair_ab.first;
         b = pair_ab.second;
-        
+        if(m_verbose <= __VER_INFO) {cout<<"a: "<<a<<", b: "<<b<<endl;}
+
+        // Calculate TOT at the fitted function maximum
+        // Use simplified parametrization because fitfunc_lowen2 requires numerical root solving at each step of GetMaximumX().
+        TF1 f_max("gf_lowe_max", fitfunc_lowen, 0.,s->GetNBins(),7);
+        f_max.FixParameter(0,constantfit);
+        f_max.FixParameter(1,energy_keV);
+        f_max.FixParameter(2,sigmafit);
+        f_max.FixParameter(3,a);
+        f_max.FixParameter(4,b);
+        f_max.FixParameter(5,c);
+        f_max.FixParameter(6,t);
+        double func_TOTatMax = f_max.GetMaximumX();
+
         // Fill graph 
-        g->SetPoint(cntr, (*i).first, func_TOTatMax ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
+        g->SetPoint(cntr, energy_keV, func_TOTatMax ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
         g->SetPointError(cntr, 0., sigmafit );
         cntr++;
+
+        delete gf;
 
         if(m_verbose == __VER_DEBUG) cout << " [ fit func --> " << gf->GetName() << "] "<< " { status : " << status << " } ";            
     
@@ -1078,12 +1075,12 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
     sto->pointsSave_ib.push_back(b);
     sto->pointsSave_ic.push_back(c); 
     sto->pointsSave_it.push_back(t);               
-    sto->pointsSave_E_TOTfit.push_back( make_pair( (*EpointItr).second, func_TOTatMax ) );  // The mean of the fit
+    sto->pointsSave_E_TOTfit.push_back( make_pair( energy_keV, func_TOTatMax ) );  // The mean of the fit
     sto->pointsSaveSigmas.push_back( sigmafit );                       // The sigma of the fit
     sto->pointsSaveConstants.push_back( constantfit );                 // The constant of the fit
     sto->calibTOTPeaks.push_back( tot_at_max_kernel );                            // The original TOT val where the fit starts
     sto->peakFitStatus.push_back( status );
-    sto->linearpairs.push_back( make_pair( (*i).first , func_TOTatMax ) );  // (E, TOT)
+    sto->linearpairs.push_back( make_pair( energy_keV , func_TOTatMax ) );  // (E, TOT)
 
     a_forBlender2 = a;
     b_forBlender2 = b;
@@ -1091,11 +1088,10 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
     t_forBlender2 = t;    
     
     if(m_verbose == __VER_DEBUG) {
-        cout << " (" << (*i).first << " , " << func_TOTatMax << ") "<<endl;
+        cout << " (" << energy_keV << " , " << func_TOTatMax << ") "<<endl;
     }
 
 	delete hf;
-    delete gf;
     return;
 }
 
@@ -1742,22 +1738,9 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
     
 	CreateGlobalKernelAndGetCriticalPoints();
 
-	// first find who has the biggest range
-	vector<TOTCalib *>::iterator iir = m_allSources.begin();
-	double maxrange = 0.;
-	for ( ; iir != m_allSources.end() ; iir++ ) {
-		if( (*iir)->GetNBins() > maxrange ) maxrange = (double) ( (*iir)->GetNBins() );
-	}
-    int nsources = m_allSources.size();    
+    //ParametersEstimation(m_calMethod); // must be placed after the definition of m_gf_lowe
 
-	m_gf_linear = new TF1("gf_linear", "gaus(0)", 0., maxrange);
-	m_gf_linear->SetParameters(1, 1, m_bandwidth);
-
-	m_gf_lowe = new TF1("gf_lowe", fitfunc_lowen2, 0., maxrange, __fitfunc_lowen_npars2);
-	m_gf_lowe->SetParameters(1, 1, m_bandwidth, 1,1,1,1,1,1);
-
-	ParametersEstimation(m_calMethod); // must be placed after the definition of m_gf_lowe
-
+    int nsources = m_allSources.size();
 	double percentage = 0.;
     // ***********************************************************************************************************
 	// ************************************  iterate over pixels   ***********************************************
@@ -3018,7 +3001,9 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
 
 	// If this situation is present determine which peaks to remove
 	// remove as many as necesary
-	if (s->GetPeakMethod() == __peakLowStats && peaks.size()> calibPoints.size() ) peaks = LowStatsPeakSelection(peaks, calibPoints.size(), s, loc_bandwidth); // better peak selection
+    if (s->GetPeakMethod() == __peakLowStats && peaks.size()> calibPoints.size() ){
+        peaks = LowStatsPeakSelection(peaks, calibPoints.size(), s, loc_bandwidth); // better peak selection
+    }
 	while( peaks.size() > calibPoints.size() ) { // regular peak selection, should probably be modified
 		TH1I * th = s->GetHisto(pix, "spectrum");
 		vector<double> integ;
@@ -4040,8 +4025,6 @@ void TOTCalib::DrawFullPixelCalib2(int pix) {
 	leg1->SetFillColor(kWhite);
 	leg1->SetBorderSize(1);
 
-	TF1 * gf; TF1 * gf_clone;
-
 	int sour = 0;
 	int orderCntr = 0;
     int p = 0;
@@ -4089,24 +4072,24 @@ void TOTCalib::DrawFullPixelCalib2(int pix) {
         funcName += "_";
         funcName += p;
         
+        TF1 * gf; TF1 * gf_clone;
+
         // last source should be the low energy one
         if (sour < nSources-1){
-            gf = m_gf_linear;
+            gf = new TF1("gf_linear","gaus(0)",0,1000);
             gf->FixParameter( 0, fit_const[orderCntr] );
             gf->FixParameter( 1, fit_mean[orderCntr].second ); // mean tot from fit        
             gf->FixParameter( 2, fit_sigmas[orderCntr] );
             
         } else {
-            gf = m_gf_lowe;
-            gf->FixParameter( 0, fit_const[orderCntr] );            
-            gf->FixParameter( 1, fit_sigmas[orderCntr] );  
-            gf->FixParameter( 2, fit_ic[orderCntr] ); // c           
-            gf->FixParameter( 3, fit_it[orderCntr] ); // t
-            gf->FixParameter( 4, fit_mean.at(0).first ); // e1
-            gf->FixParameter( 5, fit_mean.at(0).second  ); // s1
-            gf->FixParameter( 6, fit_mean.at(1).first  ); // e2
-            gf->FixParameter( 7, fit_mean.at(1).second  ); // s2
-            gf->FixParameter( 8, fit_mean[orderCntr].first ); // fixed energy 
+            gf = new TF1("gf_lowe", fitfunc_lowen,0,1000,7);
+            gf->FixParameter( 0, fit_const[orderCntr] );
+            gf->FixParameter( 1, fit_mean[orderCntr].first );
+            gf->FixParameter( 2, fit_sigmas[orderCntr] );
+            gf->FixParameter( 3, fit_ia[orderCntr] ); // a
+            gf->FixParameter( 4, fit_ib[orderCntr]); // b
+            gf->FixParameter( 5, fit_ic[orderCntr]  ); // c
+            gf->FixParameter( 6, fit_it[orderCntr]  ); // t
             //for (int i=0; i<=8;i++){cout<<gf->GetParameter(i)<<endl;}
         }
                 
@@ -4148,6 +4131,9 @@ void TOTCalib::DrawFullPixelCalib2(int pix) {
 		}
         
         p++;
+
+        if (gf) delete gf;
+        //if (gf_clone) delete gf_clone;
 	}
 
 	// If there is still room in the same pad
@@ -4666,30 +4652,41 @@ void TOTCalib::WriteCalibToAsciiFiles(TString outputName){
 
 pair<double,double> Calculate_ab_From_ct_e1s1_e2s2(double c, double t, double e1, double s1, double e2, double s2){
     
-    //cout<<"----"<<endl;
     // see Jakubek paper for more info
-    gErrorIgnoreLevel = kFatal;
     
     ROOT::Math::GSLMultiRootFinder rr(0);
-    TF2 * func_Am = new TF2("f1","[0]*x-[1]+y-[2]/([0]-[3])"); // a = x, b = y, [0] = Energy, [1] = TOT, [2] = c, [3] = t
-    TF2 * func_Cd = new TF2("f2","[0]*x-[1]+y-[2]/([0]-[3])");
-    func_Am->SetParameters(e1,s1,c,t);
-    func_Cd->SetParameters(e2,s2,c,t);
+    // Verbosity
+//    cout<<"-------------------------------------------------------------------------"<<endl;
+//    cout<<"** c: "<<c<<" t: "<<t<<" e1: "<<e1<<" s1: "<<s1<<" e2: "<<e2<<" s2: "<<s2<<endl;
+//    rr.SetPrintLevel(0);
+    //gErrorIgnoreLevel = kFatal;
+    // Functions
+    TF2 * func_Am = new TF2("f1","[0]*x-[1]+y-[2]/([0]-[3])");//,0,1000,-1000,1000,4); // a = x, b = y, [0] = Energy, [1] = TOT, [2] = c, [3] = t
+    TF2 * func_Cd = new TF2("f2","[0]*x-[1]+y-[2]/([0]-[3])");//,0,1000,-1000,1000,4);
+    func_Am->FixParameter(0,e1);
+    func_Am->FixParameter(1,s1);
+    func_Am->FixParameter(2,c);
+    func_Am->FixParameter(3,t);
+    func_Cd->FixParameter(0,e2);
+    func_Cd->FixParameter(1,s2);
+    func_Cd->FixParameter(2,c);
+    func_Cd->FixParameter(3,t);
     // wrap the functions
     ROOT::Math::WrappedMultiTF1 g1(*func_Am,2);
     ROOT::Math::WrappedMultiTF1 g2(*func_Cd,2);
     rr.AddFunction(g1);
     rr.AddFunction(g2);
-    rr.SetPrintLevel(0);
     // starting point
     double x0[2]={3,90};
     //rr.Solve(x0,2,1.); // starting point, max iterations (default 100), abs tolerance (default 1e-06)
-    rr.Solve(x0,10);    
+    rr.Solve(x0);
     const double* sol = rr.X();
     Double_t a = sol[0];
-    Double_t b = sol[1];   
-    //cout<<"aaaa"<<endl;
+    Double_t b = sol[1];
+    //cout<<"*** a: "<<a<<" b: "<<b<<endl;
     
+    delete func_Am;
+    delete func_Cd;
     return make_pair(a,b); 
 }
 

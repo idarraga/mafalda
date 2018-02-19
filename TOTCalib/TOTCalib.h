@@ -61,7 +61,6 @@ using namespace std;
 double GausFuncAdd(double * x, double * par);
 void printProgBar( int );
 #define __fitfunc_lowen_npars  7
-#define __fitfunc_lowen_npars2  9
 double fitfunc_lowen(double * x, double * par);
 double fitfunc_lowen2(double * x, double * par);
 double fitfunc_lowen_ZERO(double * x, double * par);
