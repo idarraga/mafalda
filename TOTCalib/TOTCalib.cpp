@@ -755,7 +755,7 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, ROOT::Math::Wrapp
 
     // ---- Fit Configuration
     fitter.Config().SetMinimizer("Minuit","Simplex");
-    //fitter.Config().MinimizerOptions().SetPrintLevel(3);
+    fitter.Config().MinimizerOptions().SetPrintLevel(0);
     //fitter.Config().MinimizerOptions().SetMaxFunctionCalls(1);
     //fitter.Config().MinimizerOptions().SetMaxIterations(100);
     // --> With Fitter class    
@@ -1030,39 +1030,29 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
         status = PeakFit2_lowen(s, pix, tot_at_max_kernel, &fitFunction, hf, sto, energy_keV);
 
         // Retrieve fitted parameters
+        constantfit = gf->GetParameter(0);
+        sigmafit = gf->GetParameter(1);
         c = gf->GetParameter(2);
         t = gf->GetParameter(3);
-        constantfit = gf->GetParameter(0);
-        sigmafit = TMath::Abs (gf->GetParameter(1));
+        double e1 = gf->GetParameter(4);
+        double s1 = gf->GetParameter(5);
+        double e2 = gf->GetParameter(6);
+        double s2 = gf->GetParameter(7);
+
+        // Calculate TOT at the low energy function maximum for the graph
+        func_TOTatMax = gf->GetMaximumX();
 
         // Calculate a and b from the low energy fit result
-        double e1 = (sto->linearpairs.at(0)).first;
-        double s1 = (sto->linearpairs.at(0)).second;
-        double e2 = (sto->linearpairs.at(1)).first;
-        double s2 = (sto->linearpairs.at(1)).second;
         if(m_verbose <= __VER_INFO) {cout<<"--> Calculating a and b from fit results"<<endl;}
         pair<double,double> pair_ab = Calculate_ab_From_ct_e1s1_e2s2(c,t,e1,s1,e2,s2);
         a = pair_ab.first;
         b = pair_ab.second;
         if(m_verbose <= __VER_INFO) {cout<<"a: "<<a<<", b: "<<b<<endl;}
 
-        // Calculate TOT at the fitted function maximum
-        // Use simplified parametrization because fitfunc_lowen2 requires numerical root solving at each step of GetMaximumX().
-        TF1 f_max("gf_lowe_max", fitfunc_lowen, 0.,s->GetNBins(),7);
-        f_max.FixParameter(0,constantfit);
-        f_max.FixParameter(1,energy_keV);
-        f_max.FixParameter(2,sigmafit);
-        f_max.FixParameter(3,a);
-        f_max.FixParameter(4,b);
-        f_max.FixParameter(5,c);
-        f_max.FixParameter(6,t);
-        double func_TOTatMax = f_max.GetMaximumX();
-
         // Fill graph 
         g->SetPoint(cntr, energy_keV, func_TOTatMax ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
         g->SetPointError(cntr, 0., sigmafit );
         cntr++;
-
         delete gf;
 
         if(m_verbose == __VER_DEBUG) cout << " [ fit func --> " << gf->GetName() << "] "<< " { status : " << status << " } ";            
@@ -1074,7 +1064,7 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
     sto->pointsSave_ia.push_back(a);
     sto->pointsSave_ib.push_back(b);
     sto->pointsSave_ic.push_back(c); 
-    sto->pointsSave_it.push_back(t);               
+    sto->pointsSave_it.push_back(t);
     sto->pointsSave_E_TOTfit.push_back( make_pair( energy_keV, func_TOTatMax ) );  // The mean of the fit
     sto->pointsSaveSigmas.push_back( sigmafit );                       // The sigma of the fit
     sto->pointsSaveConstants.push_back( constantfit );                 // The constant of the fit
@@ -1785,7 +1775,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
             if(m_verbose <= __VER_INFO) {            
                 cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
             }else{
-                if (pix % 10 == 0) cout<<endl<<"Processing pixel : "<<pix<<endl;
+                if (pix % 1000 == 0) cout<<endl<<"Processing pixel : "<<pix<<endl;
             }       
             
             // Start with gaussian fits (low energy fit should be at the end of the vector)
@@ -1833,10 +1823,10 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         m_calibSurrogateConstants[pix]  = calibConst;
         m_calibSurrogateProperties[pix] = calibProperties;
 
-        //if (m_verbose <= __VER_INFO) {
-            //cout<<"------- Calibration results -------"<<endl;
+        if (m_verbose <= __VER_INFO) {
+            cout<<"------- Calibration results -------"<<endl;
             cout << " | a, b, c, t : "<< a << ", "<< b << ", "<< c << ", "<< t << ", "<<endl;              
-        //}  
+        }
     // --------------------------------------------------------------------------------------------------------
         // Delete TGraph and store object
         if(g) delete g;
@@ -4251,6 +4241,8 @@ TGraphErrors * TOTCalib::GetCalibGraph(int pix){
 		g->SetPointError(cntr, m_thresholdEnergy_Err, 0.0 );
 	}
 
+    g->Print();
+
 	return g;
 }
 
@@ -4497,7 +4489,7 @@ double fitfunc_lowen2(double * x, double * par) {
     Double_t s2 = par[7]; // TOT peak mean of source 1
     Double_t mean = par[8]; // mean (keV)
     
-    // Calculation of a and b      
+    // Calculation of a and b
     pair<double,double> pair_ab = Calculate_ab_From_ct_e1s1_e2s2(c,t,e1,s1,e2,s2);
     double a = pair_ab.first;
     double b = pair_ab.second;
@@ -4652,41 +4644,44 @@ void TOTCalib::WriteCalibToAsciiFiles(TString outputName){
 
 pair<double,double> Calculate_ab_From_ct_e1s1_e2s2(double c, double t, double e1, double s1, double e2, double s2){
     
-    // see Jakubek paper for more info
-    
-    ROOT::Math::GSLMultiRootFinder rr(0);
-    // Verbosity
-//    cout<<"-------------------------------------------------------------------------"<<endl;
-//    cout<<"** c: "<<c<<" t: "<<t<<" e1: "<<e1<<" s1: "<<s1<<" e2: "<<e2<<" s2: "<<s2<<endl;
-//    rr.SetPrintLevel(0);
-    //gErrorIgnoreLevel = kFatal;
-    // Functions
-    TF2 * func_Am = new TF2("f1","[0]*x-[1]+y-[2]/([0]-[3])");//,0,1000,-1000,1000,4); // a = x, b = y, [0] = Energy, [1] = TOT, [2] = c, [3] = t
-    TF2 * func_Cd = new TF2("f2","[0]*x-[1]+y-[2]/([0]-[3])");//,0,1000,-1000,1000,4);
-    func_Am->FixParameter(0,e1);
-    func_Am->FixParameter(1,s1);
-    func_Am->FixParameter(2,c);
-    func_Am->FixParameter(3,t);
-    func_Cd->FixParameter(0,e2);
-    func_Cd->FixParameter(1,s2);
-    func_Cd->FixParameter(2,c);
-    func_Cd->FixParameter(3,t);
-    // wrap the functions
-    ROOT::Math::WrappedMultiTF1 g1(*func_Am,2);
-    ROOT::Math::WrappedMultiTF1 g2(*func_Cd,2);
-    rr.AddFunction(g1);
-    rr.AddFunction(g2);
-    // starting point
-    double x0[2]={3,90};
-    //rr.Solve(x0,2,1.); // starting point, max iterations (default 100), abs tolerance (default 1e-06)
-    rr.Solve(x0);
-    const double* sol = rr.X();
-    Double_t a = sol[0];
-    Double_t b = sol[1];
-    //cout<<"*** a: "<<a<<" b: "<<b<<endl;
-    
-    delete func_Am;
-    delete func_Cd;
+    // Calculation of a and b analytically (solving eq. 2 in NIMPR A 633 (2011) S262-S266)
+    double a = (s1-s2)/(e1-e2) - c/((e2-t)*(e1-t));
+    double b = (1/(e1-e2)) * (e1*s2 - e2*s1 + (e1*c)/(e2-t) - (e2*c)/(e1-t));
+
+    // Numerically
+//    ROOT::Math::GSLMultiRootFinder rr(0);
+//    // Verbosity
+////    cout<<"-------------------------------------------------------------------------"<<endl;
+////    cout<<"** c: "<<c<<" t: "<<t<<" e1: "<<e1<<" s1: "<<s1<<" e2: "<<e2<<" s2: "<<s2<<endl;
+////    rr.SetPrintLevel(0);
+//    //gErrorIgnoreLevel = kFatal;
+//    // Functions
+//    TF2 * func_Am = new TF2("f1","[0]*x-[1]+y-[2]/([0]-[3])");//,0,1000,-1000,1000,4); // a = x, b = y, [0] = Energy, [1] = TOT, [2] = c, [3] = t
+//    TF2 * func_Cd = new TF2("f2","[0]*x-[1]+y-[2]/([0]-[3])");//,0,1000,-1000,1000,4);
+//    func_Am->FixParameter(0,e1);
+//    func_Am->FixParameter(1,s1);
+//    func_Am->FixParameter(2,c);
+//    func_Am->FixParameter(3,t);
+//    func_Cd->FixParameter(0,e2);
+//    func_Cd->FixParameter(1,s2);
+//    func_Cd->FixParameter(2,c);
+//    func_Cd->FixParameter(3,t);
+//    // wrap the functions
+//    ROOT::Math::WrappedMultiTF1 g1(*func_Am,2);
+//    ROOT::Math::WrappedMultiTF1 g2(*func_Cd,2);
+//    rr.AddFunction(g1);
+//    rr.AddFunction(g2);
+//    // starting point
+//    double x0[2]={3,90};
+//    //rr.Solve(x0,2,1.); // starting point, max iterations (default 100), abs tolerance (default 1e-06)
+//    rr.Solve(x0);
+//    const double* sol = rr.X();
+//    Double_t a = sol[0];
+//    Double_t b = sol[1];
+//    //cout<<"*** a: "<<a<<" b: "<<b<<endl;
+//    delete func_Am;
+//    delete func_Cd;
+
     return make_pair(a,b); 
 }
 
