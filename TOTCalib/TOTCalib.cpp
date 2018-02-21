@@ -719,7 +719,7 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, ROOT::Math::Wrapp
         s2 = (sto->linearpairs.at(1)).second;
         
     }else{
-        if( m_verbose != __VER_QUIET ) {
+        if( m_verbose <= __VER_INFO ) {
             cout<< "Number of linear pair is not 2. Calib failed for pixel "<<pix<<endl;
         }
         return status;
@@ -789,6 +789,7 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, ROOT::Math::Wrapp
     //ROOT::Fit::FitResult result;
     TFitResult result;
     result = fitter.Result();
+    status = result.Status();
     if(m_verbose <= __VER_INFO) {result.Print();}
     // --> With TF1 class    
 //    Double_t c = f->GetParameter(2);
@@ -1072,11 +1073,18 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
     sto->peakFitStatus.push_back( status );
     sto->linearpairs.push_back( make_pair( energy_keV , func_TOTatMax ) );  // (E, TOT)
 
-    a_forBlender2 = a;
-    b_forBlender2 = b;
-    c_forBlender2 = c;
-    t_forBlender2 = t;    
-    
+    if (status == 0){
+        a_forBlender2 = a;
+        b_forBlender2 = b;
+        c_forBlender2 = c;
+        t_forBlender2 = t;
+    } else {
+        a_forBlender2 = 0.0;
+        b_forBlender2 = 0.0;
+        c_forBlender2 = 0.0;
+        t_forBlender2 = 0.0;
+    }
+
     if(m_verbose == __VER_DEBUG) {
         cout << " (" << energy_keV << " , " << func_TOTatMax << ") "<<endl;
     }
@@ -1764,7 +1772,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         double c = 0.;
         double t = 0.;
         
-		// ---------------------------------   Proceed with the local fits   ---------------------------------------
+        // ---------------------------------   Proceed with the fits   ---------------------------------------
         if ( totalNPoints > 0 ) {
 
             g = new TGraphErrors(totalNPoints); 
@@ -1805,7 +1813,14 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
 			surrogateStatus = __good_data; // good to go
 		}		
 
-		// store points
+        // store coeff for ASCII files
+        calibConst.push_back( a );
+        calibConst.push_back( b );
+        calibConst.push_back( c );
+        calibConst.push_back( t );
+        calibProperties.push_back( 0.0 );
+
+        // store points for root file and drawing function
         m_calibTOTPeaks[pix] = st->calibTOTPeaks;
         m_calibPoints_E_TOTfit[pix] = st->pointsSave_E_TOTfit;
         m_calibPointsSigmas[pix] = st->pointsSaveSigmas;
@@ -1814,12 +1829,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         m_calibPoints_ib[pix] = st->pointsSave_ib;
         m_calibPoints_ic[pix] = st->pointsSave_ic;
         m_calibPoints_it[pix] = st->pointsSave_it;
-        m_surrogateStatus[pix] = surrogateStatus;
-        calibConst.push_back( a );
-        calibConst.push_back( b );
-        calibConst.push_back( c );
-        calibConst.push_back( t );
-        calibProperties.push_back( 0.0 );
+        m_surrogateStatus[pix] = surrogateStatus;        
         m_calibSurrogateConstants[pix]  = calibConst;
         m_calibSurrogateProperties[pix] = calibProperties;
 
@@ -1828,6 +1838,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
             cout << " | a, b, c, t : "<< a << ", "<< b << ", "<< c << ", "<< t << ", "<<endl;              
         }
     // --------------------------------------------------------------------------------------------------------
+
         // Delete TGraph and store object
         if(g) delete g;
         if(st) delete st;
@@ -4241,7 +4252,7 @@ TGraphErrors * TOTCalib::GetCalibGraph(int pix){
 		g->SetPointError(cntr, m_thresholdEnergy_Err, 0.0 );
 	}
 
-    g->Print();
+    //g->Print();
 
 	return g;
 }
