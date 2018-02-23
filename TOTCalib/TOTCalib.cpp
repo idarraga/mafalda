@@ -683,13 +683,13 @@ int TOTCalib::PeakFit2_gaussian(TOTCalib * src, int /*pix*/, int tot, TF1 * f, T
 	return status;
 }
 
-int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, ROOT::Math::WrappedMultiTF1 * fitFunction, TH1 * h, store * sto, double energy) {
+int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, TF1 * f, TH1 * h, store * sto, double energy) {
 
 	double loc_bandwidth = src->GetKernelBandWidth();
     double minf = 1;
     double maxf = tot + loc_bandwidth*3;
 
-	TString fitconfig = "NQSW";
+    TString fitconfig = "NQS";
 	if(m_verbose == __VER_DEBUG_LOOP) fitconfig = "NSW";
 
 	if(m_verbose <= __VER_INFO) {
@@ -737,67 +737,19 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, ROOT::Math::Wrapp
 //        }
 //    }
     
-    
-    // -------------------------------------------------------
-    // ---- Creating the input fit data
-    ROOT::Fit::DataOptions opt;
-    ROOT::Fit::DataRange range(1,maxf);
-    ROOT::Fit::BinData data(opt,range);
-    ROOT::Fit::FillData(data, h);
-    
-    // ---- Creating the Fit model
-    //ROOT::Math::WrappedMultiTF1 fitFunction(*f, f->GetNdim() );
-    ROOT::Fit::Fitter fitter;
-    fitter.SetFunction(*fitFunction, false); 
+    f->SetParNames("gconst","sigma","c","t","e1","s1","e2","s2","mean");
+    f->SetParameter(0,h->GetMaximum()*0.4);
+    f->SetParameter(1,10.);
+    f->SetParameter(2,200.);
+    f->SetParameter(3,1.);
+    f->FixParameter(4,e1);
+    f->FixParameter(5,s1);
+    f->FixParameter(6,e2);
+    f->FixParameter(7,s2);
+    f->FixParameter(8,energy); // mean in keV
 
-    // ---- Fit Configuration
-    //fitter.Config().SetMinimizer("Minuit","Simplex");
-    fitter.Config().MinimizerOptions().SetPrintLevel(0);
-    //fitter.Config().MinimizerOptions().SetMaxFunctionCalls(1);
-    //fitter.Config().MinimizerOptions().SetMaxIterations(100);
-    // --> With Fitter class    
-    fitter.Config().ParSettings(0).SetValue(h->GetMaximum()*0.4); // constant
-    fitter.Config().ParSettings(1).SetValue(10.); // sigma
-    fitter.Config().ParSettings(2).SetValue(200.); // c
-    fitter.Config().ParSettings(3).SetValue(1.);   // t
-    fitter.Config().ParSettings(4).Set("e1",e1);   
-    fitter.Config().ParSettings(5).Set("s1",s1);   
-    fitter.Config().ParSettings(6).Set("e2",e2);   
-    fitter.Config().ParSettings(7).Set("s2",s2); 
-    fitter.Config().ParSettings(8).Set("energy",energy);       
-    // --> With TF1 class    
-//    f->SetParNames("gconst","sigma","c","t","e1","s1","e2","s2","mean");
-//    f->SetParameter(0,h->GetMaximum()*0.4);
-//    f->SetParameter(1,10.);
-//    f->SetParameter(2,200.);
-//    f->SetParameter(3,1.);    
-//    f->FixParameter(4,e1); 
-//    f->FixParameter(5,s1); 
-//    f->FixParameter(6,e2);     
-//    f->FixParameter(7,s2); 
-//    f->FixParameter(8,energy); // mean in keV    
-    
-    // ---- Performing the Fit
-    //TFitResultPtr fitr = h->Fit(fitFunction,"V", "" , minf, maxf);// fitconfig.Data()  
-    fitter.Fit(data);
-    
-    // ---- Fit Result  
-    // --> With Fitter class
-    //ROOT::Fit::FitResult result;
-    TFitResult result;
-    result = fitter.Result();
-    status = result.Status();
-    if(m_verbose <= __VER_INFO) {result.Print();}
-    // --> With TF1 class    
-//    Double_t c = f->GetParameter(2);
-//    Double_t c_error = f->GetParError(2);    
-//    Double_t t = f->GetParameter(3);
-//    Double_t t_error = f->GetParError(3);     
-//    cout<<"c = "<<c<<" +/- "<<c_error<<endl;
-//    cout<<"t = "<<t<<" +/- "<<t_error<<endl;   
-//    TFitResult * fitrp = fitr.Get();
-//    status = fitrp->Status();
-    // -------------------------------------------------------
+    TFitResultPtr res = h->Fit(f,fitconfig.Data());
+    status = res->Status();
 
 	return status;
 }
@@ -1021,17 +973,10 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
     TH1I * hf = s->GetHisto(pix, "blender");
     
     if ((tot_at_max_kernel >= 0) && (points.size()==1)){ // totval will be -1 if not enough peaks were identified
-
-        TF1 * gf = new TF1("gf_lowe", fitfunc_lowen2, 0.,s->GetNBins(),9);
-        gf->SetParameters(5,10,100,1,1,1,1,1,1); // cont, sigma, c, t, e1, s1, e2, s2, energy_keV
-        ROOT::Math::WrappedMultiTF1 fitFunction(*gf, gf->GetNdim() );
-    
-        if(m_verbose == __VER_DEBUG) {
-            cout << "After Fit, points for : " <<  s->GetCalibHandler()->GetSourcename() <<  "  |  ";
-        }
                     
         // Fit in the peak
-        status = PeakFit2_lowen(s, pix, tot_at_max_kernel, &fitFunction, hf, sto, energy_keV);
+        TF1 * gf = new TF1("gf_lowe", fitfunc_lowen2, 0.,s->GetNBins(),9);
+        status = PeakFit2_lowen(s, pix, tot_at_max_kernel, gf, hf, sto, energy_keV);
 
         if (status == 0){ // minimzer status code for good fit
 
@@ -1045,6 +990,7 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
             double s1 = gf->GetParameter(5);
             double e2 = gf->GetParameter(6);
             double s2 = gf->GetParameter(7);
+
 
             // Calculate TOT at the low energy function maximum for the graph
             func_TOTatMax = gf->GetMaximumX();
@@ -1065,8 +1011,6 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
         g->SetPointError(cntr, 0., sigmafit );
         cntr++;
         delete gf;
-
-        if(m_verbose == __VER_DEBUG) cout << " [ fit func --> " << gf->GetName() << "] "<< " { status : " << status << " } ";            
     
     }else{
         if(m_verbose <= __VER_INFO) cout<<"Did not find the low energy point... Calib failed for this pixel"<<endl;
@@ -1766,7 +1710,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
 		store * st = new store;
 		TGraphErrors * g = 0x0;
         
-        // Calib contant to save
+        // Calib constant to save
         double a = 0.;
         double b = 0.;
         double c = 0.;
@@ -1806,13 +1750,15 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
 		// Check if any of the sources had a fit status -1 := no data
 		vector<int> allstatus = st->peakFitStatus;
         int surrogateStatus = 0;
-        int badFitCounter = count(allstatus.begin(), allstatus.end(), 0);
-        if ( badFitCounter != m_allSources.size() ){ // in case of any problem with any fit
+        int goodFitCounter = count(allstatus.begin(), allstatus.end(), 0);
+        double chi2ndf = st->pointsSave_chi2ndf.at(m_allSources.size()-1 );
+        if ( goodFitCounter != m_allSources.size() ){ // in case of any problem with any fit
             surrogateStatus = -1;
             a = 0.; // a = 0 is the condition for failed pixel calib in mafalda
             b = 0.;
             c = 0.;
             t = 0.;
+            chi2ndf = 0.;
 		}		
 
         // store coeff for ASCII files
@@ -1820,7 +1766,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         calibConst.push_back( b );
         calibConst.push_back( c );
         calibConst.push_back( t );
-        calibProperties.push_back( surrogateStatus );
+        calibProperties.push_back( chi2ndf );
 
         // store points for root file and drawing function
         m_calibTOTPeaks[pix] = st->calibTOTPeaks;
