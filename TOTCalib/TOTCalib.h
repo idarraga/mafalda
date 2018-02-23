@@ -172,6 +172,7 @@ public :
 		vector< double > pointsSave_ib;
 		vector< double > pointsSave_ic;
 		vector< double > pointsSave_it;
+        vector< double > pointsSave_chi2ndf;
 		vector< int > calibTOTPeaks;
 		vector<pair<double,double> > linearpairs; //(E, TOT)
 		vector<int> peakFitStatus;

@@ -680,9 +680,6 @@ int TOTCalib::PeakFit2_gaussian(TOTCalib * src, int /*pix*/, int tot, TF1 * f, T
     TFitResult * fitrp = fitr.Get();
     int status = fitrp->Status();
 
-	// save the status
-	sto->peakFitStatus.push_back( status );
-
 	return status;
 }
 
@@ -754,7 +751,7 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, ROOT::Math::Wrapp
     fitter.SetFunction(*fitFunction, false); 
 
     // ---- Fit Configuration
-    fitter.Config().SetMinimizer("Minuit","Simplex");
+    //fitter.Config().SetMinimizer("Minuit","Simplex");
     fitter.Config().MinimizerOptions().SetPrintLevel(0);
     //fitter.Config().MinimizerOptions().SetMaxFunctionCalls(1);
     //fitter.Config().MinimizerOptions().SetMaxIterations(100);
@@ -935,68 +932,76 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 
 void TOTCalib::ProcessOneSource2_gaussian(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr) {
 
-	// Sets of points
+    // !!! TO FIX: only support one point per source for now !!!!!
     // energies in this vector are in absolute value (for peak order)
     // Should be only one element in this vector
     vector< pair<double, double> > points = Extract_E_TOT_Points2 ( pix, s ) ;
-    vector<pair<double, double> >::iterator i;
+    vector<pair<double, double> >::iterator i = points.begin();
 
-	// Obtain the histogram for this pixel
-	int totval = 0, status = -1;
-	double totmeanfit = -1., sigmafit = -1., constantfit = -1.;
-
-	// The data histogram
-	TH1I * hf = s->GetHisto(pix, "blender");
+    // Initialize vlaues to store
+    int status = -1;
+    double totmeanfit = 0., sigmafit = 0., constantfit = 0., chi2ndf = 0.;
+    double energy = 0.;
+    int totval_kernel = 0;
 
 	if(m_verbose == __VER_DEBUG) {cout << "After Fit, points for : " <<  s->GetCalibHandler()->GetSourcename() <<  "  |  ";}
 
-	for ( i = points.begin() ; i != points.end(); i++ ) {
+    if (points.size()==1){
 
-		// Make the fit around the peak
-		totval = (*i).second;
+        // The data histogram
+        TH1I * hf = s->GetHisto(pix, "blender");
+
+        // Make the fit around the peak
+        totval_kernel = (*i).second;
+        energy = (*i).first;
 
         // The selected fitting function.
         TF1 * gf = new TF1("gf_linear", "gaus(0)", 0., s->GetNBins());
         gf->SetParameters(1, 1, m_bandwidth);
 
-		if (totval >=0){ // totval will be -1 if not enough peaks were identified
+        if (totval_kernel >=0){ // totval will be -1 if not enough peaks were identified
 
-			// Fit in the peak
-			status = PeakFit2_gaussian(s, pix, totval, gf, hf, sto);
-            constantfit = gf->GetParameter(0);   
+            // Fit in the peak
+            status = PeakFit2_gaussian(s, pix, totval_kernel, gf, hf, sto);
+            constantfit = gf->GetParameter(0);
             sigmafit = TMath::Abs ( gf->GetParameter(2) );
             totmeanfit = gf->GetParameter(1);
-            
-            // Add point in the graph
-            g->SetPoint(cntr, (*i).first, totmeanfit ); // E, TOT (from the fit in this context)
-            g->SetPointError(cntr, 0., sigmafit );
-            
-            if(m_verbose == __VER_DEBUG) {cout << " [ fit func --> " << gf->GetName() << "] "<< " { status : " << status << " } ";}
-            
-            cntr++;   
-		} 
+            chi2ndf = gf->GetChisquare()/gf->GetNDF();
+        }
 
-        sto->pointsSave_ia.push_back( 0. );
-        sto->pointsSave_ib.push_back( 0. );
-        sto->pointsSave_ic.push_back( 0. );
-        sto->pointsSave_it.push_back( 0. );            
-		sto->pointsSave_E_TOTfit.push_back( make_pair( (*i).first, totmeanfit ) );  // The mean of the fit
-		sto->pointsSaveSigmas.push_back( sigmafit );                       // The sigma of the fit
-		sto->pointsSaveConstants.push_back( constantfit );                 // The constant of the fit
-		sto->calibTOTPeaks.push_back( totval );                            // The original TOT val where the fit starts
-		sto->peakFitStatus.push_back( status );
-        sto->linearpairs.push_back( make_pair( (*i).first , totmeanfit ) );  // (E, TOT)	
+        if(m_verbose == __VER_DEBUG) {cout << " [ fit func --> " << gf->GetName() << "] "<< " { status : " << status << " } ";}
 
-		if(m_verbose == __VER_DEBUG) {cout << " (" << (*i).first << " , " << totmeanfit << ") ";}
-        
         delete gf;
-	}
-    
-	if(m_verbose == __VER_DEBUG) cout << endl;
-	delete hf;
+        delete hf;
+        cntr++;
+
+    } else {
+        if(m_verbose == __VER_DEBUG) {cout << "Did not find exactly one peak for this source. Calib failed.";}
+        cntr++;
+    }
+
+    // Add point in the graph
+    g->SetPoint(cntr, energy, totmeanfit ); // E, TOT (from the fit in this context)
+    g->SetPointError(cntr, 0., sigmafit );
+
+    // Store results
+    sto->pointsSave_ia.push_back( 0. );
+    sto->pointsSave_ib.push_back( 0. );
+    sto->pointsSave_ic.push_back( 0. );
+    sto->pointsSave_it.push_back( 0. );
+    sto->pointsSave_E_TOTfit.push_back( make_pair( energy, totmeanfit ) );  // The mean of the fit
+    sto->pointsSaveSigmas.push_back( sigmafit );                       // The sigma of the fit
+    sto->pointsSaveConstants.push_back( constantfit );                 // The constant of the fit
+    sto->calibTOTPeaks.push_back( totval_kernel );                            // The original TOT val where the fit starts
+    sto->peakFitStatus.push_back( status );
+    sto->linearpairs.push_back( make_pair( energy , totmeanfit ) );  // (E, TOT)
+    sto->pointsSave_chi2ndf.push_back(chi2ndf);
+
+    if(m_verbose == __VER_DEBUG) cout << " (" << energy << " , " << totmeanfit << ") "<< endl;
+    return;
 }
 
-void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr, double & a_forBlender2, double & b_forBlender2, double & c_forBlender2, double & t_forBlender2) {
+void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr, double & a, double & b, double & c, double & t) {
 
 	// Set of points
 	vector< pair<double, double> > points = Extract_E_TOT_Points ( pix, s ) ; // energies in this vector are in absolute value (for peak order)    
@@ -1004,16 +1009,14 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
     double tot_at_max_kernel = (*i).second;
     double energy_keV = (*i).first;
             
-    // Initialize variables to be stored in the "store" structure 
-    double a = -1;
-    double b = -1;
-    double c = -1;
-    double t = -1;
-    double constantfit = -1;
-    double sigmafit = -1;
-    int status = -1; //will still try to fit the surrogate w/o this source (unless they all have -1 status)    
-    double func_TOTatMax = -1;
-    
+    // Initialize variables to be stored in the "store" structure (the a,b,c,t coeff are already initialized)
+    double constantfit = 0.;
+    double sigmafit = 0.;
+    double chi2ndf = 0.;
+    int status = -1; // mimizer has different status codes depending on problems but I dont differentiate them
+    double func_TOTatMax = 0.;
+    pair<double,double> pair_E_TOTfit = make_pair(0.,0.);
+
     // The data histogram
     TH1I * hf = s->GetHisto(pix, "blender");
     
@@ -1030,25 +1033,32 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
         // Fit in the peak
         status = PeakFit2_lowen(s, pix, tot_at_max_kernel, &fitFunction, hf, sto, energy_keV);
 
-        // Retrieve fitted parameters
-        constantfit = gf->GetParameter(0);
-        sigmafit = gf->GetParameter(1);
-        c = gf->GetParameter(2);
-        t = gf->GetParameter(3);
-        double e1 = gf->GetParameter(4);
-        double s1 = gf->GetParameter(5);
-        double e2 = gf->GetParameter(6);
-        double s2 = gf->GetParameter(7);
+        if (status == 0){ // minimzer status code for good fit
 
-        // Calculate TOT at the low energy function maximum for the graph
-        func_TOTatMax = gf->GetMaximumX();
+            // Retrieve fitted parameters
+            constantfit = gf->GetParameter(0);
+            sigmafit = gf->GetParameter(1);
+            c = gf->GetParameter(2);
+            t = gf->GetParameter(3);
+            chi2ndf = gf->GetChisquare()/gf->GetNDF();
+            double e1 = gf->GetParameter(4);
+            double s1 = gf->GetParameter(5);
+            double e2 = gf->GetParameter(6);
+            double s2 = gf->GetParameter(7);
 
-        // Calculate a and b from the low energy fit result
-        if(m_verbose <= __VER_INFO) {cout<<"--> Calculating a and b from fit results"<<endl;}
-        pair<double,double> pair_ab = Calculate_ab_From_ct_e1s1_e2s2(c,t,e1,s1,e2,s2);
-        a = pair_ab.first;
-        b = pair_ab.second;
-        if(m_verbose <= __VER_INFO) {cout<<"a: "<<a<<", b: "<<b<<endl;}
+            // Calculate TOT at the low energy function maximum for the graph
+            func_TOTatMax = gf->GetMaximumX();
+
+            // Other values to store
+            pair_E_TOTfit = make_pair( energy_keV, func_TOTatMax );
+
+            // Calculate a and b from the low energy fit result
+            if(m_verbose <= __VER_INFO) {cout<<"--> Calculating a and b from fit results"<<endl;}
+            pair<double,double> pair_ab = Calculate_ab_From_ct_e1s1_e2s2(c,t,e1,s1,e2,s2);
+            a = pair_ab.first;
+            b = pair_ab.second;
+            if(m_verbose <= __VER_INFO) {cout<<"a: "<<a<<", b: "<<b<<endl;}
+        }
 
         // Fill graph 
         g->SetPoint(cntr, energy_keV, func_TOTatMax ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
@@ -1059,31 +1069,20 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
         if(m_verbose == __VER_DEBUG) cout << " [ fit func --> " << gf->GetName() << "] "<< " { status : " << status << " } ";            
     
     }else{
-        cout<<"Did not find the low energy point... Calib failed for this pixel"<<endl;        
+        if(m_verbose <= __VER_INFO) cout<<"Did not find the low energy point... Calib failed for this pixel"<<endl;
     }
 
     sto->pointsSave_ia.push_back(a);
     sto->pointsSave_ib.push_back(b);
-    sto->pointsSave_ic.push_back(c); 
+    sto->pointsSave_ic.push_back(c);
     sto->pointsSave_it.push_back(t);
-    sto->pointsSave_E_TOTfit.push_back( make_pair( energy_keV, func_TOTatMax ) );  // The mean of the fit
+    sto->pointsSave_E_TOTfit.push_back( pair_E_TOTfit );  // The mean of the fit
     sto->pointsSaveSigmas.push_back( sigmafit );                       // The sigma of the fit
     sto->pointsSaveConstants.push_back( constantfit );                 // The constant of the fit
     sto->calibTOTPeaks.push_back( tot_at_max_kernel );                            // The original TOT val where the fit starts
     sto->peakFitStatus.push_back( status );
-    sto->linearpairs.push_back( make_pair( energy_keV , func_TOTatMax ) );  // (E, TOT)
-
-    if (status == 0){
-        a_forBlender2 = a;
-        b_forBlender2 = b;
-        c_forBlender2 = c;
-        t_forBlender2 = t;
-    } else {
-        a_forBlender2 = 0.0;
-        b_forBlender2 = 0.0;
-        c_forBlender2 = 0.0;
-        t_forBlender2 = 0.0;
-    }
+    sto->linearpairs.push_back( pair_E_TOTfit );  // (E, TOT)
+    sto->pointsSave_chi2ndf.push_back(chi2ndf);
 
     if(m_verbose == __VER_DEBUG) {
         cout << " (" << energy_keV << " , " << func_TOTatMax << ") "<<endl;
@@ -1410,7 +1409,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
                 cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
             }/*else{
                 if (pix % 1000 == 0) cout<<endl<<"Processing pixel : "<<pix<<endl;
-            }    */      
+            }    */
             
 			for (i = m_allSources.begin() ; i != m_allSources.end() ; i++ ) {
 
@@ -1740,6 +1739,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
 
     int nsources = m_allSources.size();
 	double percentage = 0.;
+    int nBadPixels = 0;
     // ***********************************************************************************************************
 	// ************************************  iterate over pixels   ***********************************************
     // ***********************************************************************************************************
@@ -1790,10 +1790,12 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
 			for (int i = 0 ; i < nsources - 1  ; i++ ) {
                 TOTCalib* source = m_allSources.at(i);
 				ProcessOneSource2_gaussian(source, st, g, pix, cntr);
-				if(m_verbose <= __VER_INFO) {
-					cout << "Got " << st->linearpairs.size() << " pairs in the linear part." << endl;
-				}
 			}
+
+            if(m_verbose <= __VER_INFO) {
+                cout << "Got " << st->linearpairs.size() << " pairs in the linear part." << endl;
+            }
+
             // Finish with low energy fit
             ProcessOneSource2_lowen(m_allSources.at(nsources-1), st, g, pix, cntr,a,b,c,t);             
 		}
@@ -1803,14 +1805,14 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         // -------------------------------------   Save fit results   -------------------------------------------        
 		// Check if any of the sources had a fit status -1 := no data
 		vector<int> allstatus = st->peakFitStatus;
-		int surrogateStatus;
-		int badFitCounter = count(allstatus.begin(), allstatus.end(), -1);
-		if ( badFitCounter == (int)allstatus.size() ){ 
-			surrogateStatus = __no_data; //cannot build surrogate
-		} else if (badFitCounter > 0){
-			surrogateStatus = __partial_data; // good to go, but fit may be wrong
-		} else {
-			surrogateStatus = __good_data; // good to go
+        int surrogateStatus = 0;
+        int badFitCounter = count(allstatus.begin(), allstatus.end(), 0);
+        if ( badFitCounter != m_allSources.size() ){ // in case of any problem with any fit
+            surrogateStatus = -1;
+            a = 0.; // a = 0 is the condition for failed pixel calib in mafalda
+            b = 0.;
+            c = 0.;
+            t = 0.;
 		}		
 
         // store coeff for ASCII files
@@ -1818,7 +1820,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         calibConst.push_back( b );
         calibConst.push_back( c );
         calibConst.push_back( t );
-        calibProperties.push_back( 0.0 );
+        calibProperties.push_back( surrogateStatus );
 
         // store points for root file and drawing function
         m_calibTOTPeaks[pix] = st->calibTOTPeaks;
@@ -1831,7 +1833,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         m_calibPoints_it[pix] = st->pointsSave_it;
         m_surrogateStatus[pix] = surrogateStatus;        
         m_calibSurrogateConstants[pix]  = calibConst;
-        m_calibSurrogateProperties[pix] = calibProperties;
+        m_calibSurrogateProperties[pix] = calibProperties; // one element only in vector for now
 
         if (m_verbose <= __VER_INFO) {
             cout<<"------- Calibration results -------"<<endl;
@@ -1847,6 +1849,10 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
             percentage = ( (double)(pix - m_minpix) / (double)(m_maxpix - m_minpix) ) * 100;
             printProgBar( (int) percentage );
         }   
+
+        if ((nBadPixels>0) &&(nBadPixels % 1000 == 0)){
+            cout<<"!!!! WARNING: "<<nBadPixels<<" bad pixels."<<endl;
+        }
     // ********************************************************************************************************** 
     // **********************************************************************************************************     
     // ********************************************************************************************************** 
@@ -2140,7 +2146,7 @@ void TOTCalib::SavePixelResolution(TString file_a, TString file_b, TString file_
             if(m_verbose != __VER_QUIET) {            
                 cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
             }else{
-                if (pix % 1000 == 0) cout<<endl<<"Processing pixel : "<<pix<<endl;
+                if (pix % 10 == 0) cout<<endl<<"Processing pixel : "<<pix<<endl;
             }    
 
             // ************************* ProcessOneSource ************************************
@@ -2444,7 +2450,7 @@ TH1I * TOTCalib::GetHistoCalibrated(int pix, TString extraName, double energymax
 	name += pix;
     
     double rangemax = energymax*1.8;
-    double binsize = .2; // keV
+    double binsize = 1; // keV
     int nbins = rangemax/binsize;
 	TH1I * h = new TH1I(name, name, nbins, 0, rangemax);
 	vector<double> hist = m_calibhistos[pix];
@@ -3042,14 +3048,14 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
 	if( (peaks.empty() || peaks.size() < calibPoints.size()) ) { //JS 23/03/17
         if (m_verbose <= __VER_INFO){
             cout << "[WARNING] Not enough peaks were identified for pixel " << pix << " and source "<< s->GetCalibHandler()->GetSourcename() <<endl; 
-            cout << "          Setting all peaks to -1." << endl;            
+            cout << "          Calib failed for this pixel." << endl;
         }
-		for (int k = 0; k < (int)calibPoints.size(); k++){
-			points.push_back(
-				make_pair(
-					TMath::Abs(calibPoints[k]),
-					-1.));
-		}
+//		for (int k = 0; k < (int)calibPoints.size(); k++){
+//			points.push_back(
+//				make_pair(
+//					TMath::Abs(calibPoints[k]),
+//					-1.));
+//		}
 		return points;
 	}
 
@@ -4319,7 +4325,7 @@ CalibHandler::CalibHandler (string source) {
 
 	} else if ( ! TString(source).CompareTo( "Cd_fluo_TPXGaAs", TString::kIgnoreCase )
     ) {
-        
+
         m_calibPoints[0] = 10.5; // K-alpha peak of As
         m_calibPointsRegion[0] = __linear_reg;
         m_calibPoints[1] = 23.1; // K-alpha peak of Cd 
