@@ -181,7 +181,8 @@ public :
 	TH1I * GetHisto(int, TString extra = "");
 	TF1 * GetKernelDensityFunction(int);
 	int GetCriticalPoints(int i , vector<double> &, vector<double> &);
-	int GetSign(double slope);
+    int GetCriticalPoints2(int pixID , vector<double> &, vector<double> &);
+    int GetSign(double slope);
 	map<int, vector<double> > GetMaxPeaksIdentified(){ return m_critPointsMax; };
 	CalibHandler * GetCalibHandler(){ return m_calhandler; };
 	vector< pair<double, double> > GetCalibPoints(int pix){ return m_calibPoints_E_TOTfit[pix]; };

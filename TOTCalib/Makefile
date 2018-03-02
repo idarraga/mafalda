@@ -22,7 +22,7 @@ dbg:	TOTCalib
 all:	TOTCalib
 
 TOTCalib: TOTCalib.o TOTCalibDict.o
-	g++ -shared -o libTOTCalib.so TOTCalib.o TOTCalibDict.o $(GLOBAL_CFLAGS) $(INCLUDE) ${LIBS} -lMathMore
+	g++ -shared -o libTOTCalib.so TOTCalib.o TOTCalibDict.o $(GLOBAL_CFLAGS) $(INCLUDE) ${LIBS} -lMathMore -lSpectrum
 	
 TOTCalib.o:	TOTCalib.cpp TOTCalib.h
 	g++ $(GLOBAL_CFLAGS) $(INCLUDE) -c TOTCalib.cpp

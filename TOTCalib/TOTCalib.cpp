@@ -20,6 +20,8 @@
 #include <Fit/Fitter.h>
 #include <Fit/FitResult.h>
 #include <Fit/FitResult.h>
+#include <TSpectrum.h>
+
 #include "Math/MinimizerOptions.h"
 
 #include <time.h>
@@ -145,7 +147,7 @@ void TOTCalib::Loop()
 		// Create kernel density function and sample it (using a stencil)
 		//  in order to find the critical points
 		vector<double> min, max;
-		GetCriticalPoints(i, min, max);
+        GetCriticalPoints(i, min, max);
 
 		// Fill the maps with the critical points.  The
 		//  maximums should correspond to the matching
@@ -3032,9 +3034,9 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
 }
 
 
-int TOTCalib::GetCriticalPoints(int i, vector<double> & min, vector<double> & max){
+int TOTCalib::GetCriticalPoints(int pixID, vector<double> & min, vector<double> & max){
 
-	TF1 * f = CreateKernelDensityFunction( i, m_calibhistos[i], m_bandwidth );
+    TF1 * f = CreateKernelDensityFunction( pixID, m_calibhistos[pixID], m_bandwidth );
 
 	int ncrit = 0;
 	short sign = __s_pos;
@@ -3075,6 +3077,32 @@ int TOTCalib::GetCriticalPoints(int i, vector<double> & min, vector<double> & ma
 	//cout << "------------------------------------------------------- " << endl;
 
 	return ncrit;
+}
+
+int TOTCalib::GetCriticalPoints2(int pixID, vector<double> & min, vector<double> & max){
+
+    TSpectrum *s = new TSpectrum(10);
+
+    TH1I* h = GetHisto(pixID,"");
+    Int_t nfound = s->Search(h,m_bandwidth,"",0.10);//goff
+    Double_t* positionsX = s->GetPositionX();
+    // Turn array to vector
+    //std::vector<int> v(std::begin(positionsX), std::end(positionsX));
+    std::vector<double> v(positionsX, positionsX + sizeof positionsX / sizeof positionsX[0]);
+    max = v;
+
+    delete s;
+
+    //cout << "ncrit = " << ncrit;
+    //vector<double>::iterator i;
+    //cout << " | minimums at : ";
+    //for(i = min.begin() ; i != min.end() ; i++) cout << *i << "  ";
+    //cout << " | maximums at : ";
+    //for(i = max.begin() ; i != max.end() ; i++) cout << *i << "  ";
+    //cout << endl;
+    //cout << "------------------------------------------------------- " << endl;
+
+    return nfound;
 }
 
 double TOTCalib::DerivativeFivePointsStencil(TF1 * f, double x, double h) {
