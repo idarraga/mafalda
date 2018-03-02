@@ -147,7 +147,7 @@ void TOTCalib::Loop()
 		// Create kernel density function and sample it (using a stencil)
 		//  in order to find the critical points
 		vector<double> min, max;
-        GetCriticalPoints(i, min, max);
+        GetCriticalPoints2(i, min, max);
 
 		// Fill the maps with the critical points.  The
 		//  maximums should correspond to the matching
@@ -3086,9 +3086,12 @@ int TOTCalib::GetCriticalPoints2(int pixID, vector<double> & min, vector<double>
     TH1I* h = GetHisto(pixID,"");
     Int_t nfound = s->Search(h,m_bandwidth,"",0.10);//goff
     Double_t* positionsX = s->GetPositionX();
+    vector<double> v;
     // Turn array to vector
-    //std::vector<int> v(std::begin(positionsX), std::end(positionsX));
-    std::vector<double> v(positionsX, positionsX + sizeof positionsX / sizeof positionsX[0]);
+    for (int i=0; i<nfound; i++){
+        v.push_back(positionsX[i]);
+    }
+
     max = v;
 
     delete s;
