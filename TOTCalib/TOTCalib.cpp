@@ -132,11 +132,19 @@ void TOTCalib::Loop()
 	for (int i = m_minpix ; i <= m_maxpix ; i++) {
 
 		// Skip the bad pixels
-		if ( PixelInBadPixelList(i) ) continue;
-
+        if ( PixelInBadPixelList(i) ){
+            m_critPointsMax_vec.push_back(vector<double> ()); 
+            m_critPointsMax_amplitude_vec.push_back(vector<double> ());            
+            continue;
+        }
+        
 		// See first of all if this particular pixel has valid data.
 		// It can be a masked pixel or something noisy
-		if( VectorSum( m_calibhistos[i] ) == 0. ) continue;
+        if( VectorSum( m_calibhistos[i] ) == 0. ){
+            m_critPointsMax_vec.push_back(vector<double> ()); 
+            m_critPointsMax_amplitude_vec.push_back(vector<double> ());            
+            continue;
+        }
 
 		if ( i % barstep == 0 ) {
 			percentage = ( (double)(i - m_minpix) / (double)(m_maxpix - m_minpix) ) * 100;
@@ -157,12 +165,20 @@ void TOTCalib::Loop()
 		m_critPointsMax[i] = max;
 		m_critPointsMin[i] = min;
         m_critPointsMax_amplitude[i] = max_amplitude;
-        
-
+	    m_critPointsMax_vec.push_back(max); 
+        m_critPointsMax_amplitude_vec.push_back(max_amplitude);
 	}
+    
+    int npix = m_maxpix-m_minpix+1;
+    int s1 = m_critPointsMax_vec.size(); 
+    int s2 = m_critPointsMax_amplitude_vec.size();
+    if ( (s1!=npix) || (s2!=npix) ){
+        cout<<"Problem with vectors of peaks. Exit(1)"<<endl;
+        exit(1);
+    }
+
 	printProgBar( (int) 100 );
 	cout << endl; // extra endl to finish correctly the progress bar
-
 }
 
 double TOTCalib::VectorSum(vector<double> v){
@@ -2945,11 +2961,11 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib * s ) {
 
 	// These are the identified peaks.  There could be one more than expected which is usually artificial.
-	unordered_map<int, vector<double> > s_tot = s->GetMaxPeaksIdentified();
-    unordered_map<int, vector<double> > s_tot_amp = s->GetMaxPeaksIdentified_amplitude();    
-	vector<double> peaks = s_tot[pix];
-    vector<double> peaks_amplitude = s_tot_amp[pix];
-    
+    vector < vector<double> > s_tot = s->GetMaxPeaksIdentified_vec();
+    vector < vector<double> > s_tot_amp = s->GetMaxPeaksIdentified_amplitude_vec();    
+    vector<double> peaks = s_tot[pix-m_minpix];
+    vector<double> peaks_amplitude = s_tot_amp[pix-m_minpix];
+
     string source_name = s->GetCalibHandler()->GetSourcename();
 	double loc_bandwidth = s->GetKernelBandWidth(); 
 
@@ -3005,7 +3021,6 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
         if (m_verbose <= __VER_INFO){cout<<"Adding an artificial peak."<<endl;}       
 	}
     
-
 	if(m_verbose == __VER_DEBUG) cout << "First guess, points for : " <<  s->GetCalibHandler()->GetSourcename() <<  "  |  ";
 
 	for (int p = 0 ; p < (int)calibPoints.size() ; p++) {

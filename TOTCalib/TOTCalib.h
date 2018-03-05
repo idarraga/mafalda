@@ -186,6 +186,8 @@ public :
     int GetSign(double slope);
 	unordered_map<int, vector<double> > GetMaxPeaksIdentified(){ return m_critPointsMax;}
     unordered_map<int, vector<double> > GetMaxPeaksIdentified_amplitude(){ return m_critPointsMax_amplitude; }	
+    vector <vector<double> > GetMaxPeaksIdentified_vec(){ return m_critPointsMax_vec;}
+    vector < vector<double> > GetMaxPeaksIdentified_amplitude_vec(){ return m_critPointsMax_amplitude_vec; }	
     CalibHandler * GetCalibHandler(){ return m_calhandler; }
 	vector< pair<double, double> > GetCalibPoints(int pix){ return m_calibPoints_E_TOTfit[pix]; }
 	TF1 * GetSurrogateFunction(int);
@@ -420,7 +422,10 @@ private:
 
 	// key = pixel, val = vector of critical points
 	unordered_map<int, vector<double> > m_critPointsMax;
-    unordered_map<int, vector<double> > m_critPointsMax_amplitude;    
+    unordered_map<int, vector<double> > m_critPointsMax_amplitude; 
+    // try if faster with vector
+	vector < vector<double> > m_critPointsMax_vec;
+    vector < vector<double> > m_critPointsMax_amplitude_vec;  
 	// key = pixel, val = vector of critical points
 	map<int, vector<double> > m_critPointsMin;
 	// This map contains the final: a,b,c,t parameters of the calibration
