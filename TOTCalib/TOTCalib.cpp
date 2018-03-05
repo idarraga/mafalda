@@ -3130,6 +3130,7 @@ int TOTCalib::GetCriticalPoints2(int pixID, vector<double> & max, vector<double>
     
     delete s;
     delete d;
+    delete h;
     
     //cout << "ncrit = " << ncrit;
     //vector<double>::iterator i;
@@ -3375,6 +3376,7 @@ TH2I * TOTCalib::EntriesPlots(int i){
 //return m_calibhistos[i]->GetMean();
 //}
 
+// WARNING: when using this function don't forget to delete the histogram! (else->memory leak) 
 TH1I * TOTCalib::GetHisto(int pix, TString extraName){
 
 	// Create an histo from the vector<double> only if requested here
