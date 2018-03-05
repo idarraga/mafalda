@@ -146,8 +146,8 @@ void TOTCalib::Loop()
 
 		// Create kernel density function and sample it (using a stencil)
 		//  in order to find the critical points
-		vector<double> min, max;
-        GetCriticalPoints2(i, min, max);
+		vector<double> min, max, max_amplitude;
+        GetCriticalPoints2(i, max, max_amplitude);
 
 		// Fill the maps with the critical points.  The
 		//  maximums should correspond to the matching
@@ -156,6 +156,8 @@ void TOTCalib::Loop()
 		//  relation : TOT(E)
 		m_critPointsMax[i] = max;
 		m_critPointsMin[i] = min;
+        m_critPointsMax_amplitude[i] = max_amplitude;
+        
 
 	}
 	printProgBar( (int) 100 );
@@ -1746,7 +1748,6 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
             ProcessOneSource2_lowen(m_allSources.at(nsources-1), st, g, pix, cntr,a,b,c,t);             
 		}
         // --------------------------------------------------------------------------------------------------------
-
         
         // -------------------------------------   Save fit results   -------------------------------------------        
 		// Check if any of the sources had a fit status -1 := no data
@@ -2940,7 +2941,9 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
 
 	// These are the identified peaks.  There could be one more than expected which is usually artificial.
 	map<int, vector<double> > s_tot = s->GetMaxPeaksIdentified();
+    map<int, vector<double> > s_tot_amp = s->GetMaxPeaksIdentified_amplitude();    
 	vector<double> peaks = s_tot[pix];
+    vector<double> peaks_amplitude = s_tot_amp[pix];
 
     string source_name = s->GetCalibHandler()->GetSourcename();
 	double loc_bandwidth = s->GetKernelBandWidth(); 
@@ -2959,33 +2962,20 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
     if (s->GetPeakMethod() == __peakLowStats && peaks.size()> calibPoints.size() ){
         peaks = LowStatsPeakSelection(peaks, calibPoints.size(), s, loc_bandwidth); // better peak selection
     }
-	while( peaks.size() > calibPoints.size() ) { // regular peak selection, should probably be modified
-		TH1I * th = s->GetHisto(pix, "spectrum");
-		vector<double> integ;
-		int npeaks = (int)peaks.size();
-		for ( int i = 0 ; i < (int)peaks.size() ; i++ ) {
-			integ.push_back( th->Integral( th->FindBin( peaks[i] - loc_bandwidth ), th->FindBin( peaks[i]+loc_bandwidth ) ) );
-			if (m_verbose != __VER_QUIET){ 
-                cout << th->GetName() << " thl=" << peaks[i] << " [" << i << "]=" << integ[i] << " | ";
-            }
-		}
-		// If the last peak has low weight (data close to it, integral) then remove the last one
-		if ( integ[npeaks-1] < 0.1*integ[0] ) { // it the last is less than 10% the first integral
-            if (m_verbose != __VER_QUIET){ 
-                cout << " | last item removed ";
-			}
-			peaks.pop_back();
-		} else {
-			// Otherwise remove the first one
-            if (m_verbose <= __VER_INFO){ 
-                cout << " | first item removed "<<endl;
-            }
-			peaks.erase( peaks.begin() );
-		}
+    
+	while( peaks.size() > calibPoints.size() ) { 
 
-		delete th;
+        // Remove peaks with lowest amplitude in smoothed histogram
+        std::vector<double>::iterator result;       
+        result = std::min_element(peaks_amplitude.begin(), peaks_amplitude.end());
+        int index = std::distance(peaks_amplitude.begin(), result);
+        peaks.erase(peaks.begin()+index);
+        peaks_amplitude.erase(peaks_amplitude.begin()+index);
 	}
 
+    // Sort peaks in ascending order 
+    std::sort (peaks.begin(), peaks.end());
+    
 	// Resulting points ( E , TOT )
 	vector<pair<double, double> > points;
 
@@ -2993,19 +2983,23 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
 	//  this particular pixel can be noisy or simply masked.
 	// Also is there is less peaks identified than calibration points
 	//  this pixel can not be processed.
-	if( (peaks.empty() || peaks.size() < calibPoints.size()) ) { //JS 23/03/17
+	if( peaks.size() < calibPoints.size() ) { 
         if (m_verbose <= __VER_INFO){
             cout << "[WARNING] Not enough peaks were identified for pixel " << pix << " and source "<< s->GetCalibHandler()->GetSourcename() <<endl; 
             cout << "          Calib failed for this pixel." << endl;
         }
-//		for (int k = 0; k < (int)calibPoints.size(); k++){
-//			points.push_back(
-//				make_pair(
-//					TMath::Abs(calibPoints[k]),
-//					-1.));
-//		}
-		return points;
+        // return points;
 	}
+    
+    if( peaks.empty() ) {return points;}
+    
+    // !!!! TO REMOVE (temporary solution) !!!!!!
+    // In case of one peak found only I use it as the peak to fit
+    if( peaks.size() == 1 ) {
+        peaks.push_back(peaks.at(0)); 
+        if (m_verbose <= __VER_INFO){cout<<"Adding an artificial peak."<<endl;}       
+	}
+    
 
 	if(m_verbose == __VER_DEBUG) cout << "First guess, points for : " <<  s->GetCalibHandler()->GetSourcename() <<  "  |  ";
 
@@ -3079,23 +3073,59 @@ int TOTCalib::GetCriticalPoints(int pixID, vector<double> & min, vector<double> 
 	return ncrit;
 }
 
-int TOTCalib::GetCriticalPoints2(int pixID, vector<double> & min, vector<double> & max){
-
-    TSpectrum *s = new TSpectrum(10);
-
+int TOTCalib::GetCriticalPoints2(int pixID, vector<double> & max, vector<double> & max_amplitude){
+   
+    // To tune
+    Double_t sigma = m_bandwidth;
+    Double_t thl = 1; // in % for high res and normalized to 1 for normal search
+    bool bckremove = false;
+    Int_t deconIterations = 3;
+    bool markov = false;
+    Int_t averWindow = 2; // applies only if markov = true
+        
+    // Search
+    TSpectrum *s = new TSpectrum(100);
     TH1I* h = GetHisto(pixID,"");
-    Int_t nfound = s->Search(h,m_bandwidth,"",0.10);//goff
-    Double_t* positionsX = s->GetPositionX();
-    vector<double> v;
+    Int_t nbins = h->GetNbinsX();
+    int ssize = nbins;        
+    Double_t sarray[nbins];
+    Double_t destVector[nbins];                
+    for (int i=0;i<nbins;i++){sarray[i]=h->GetBinContent(i);}
+    int nfound = s->SearchHighRes(sarray,destVector,ssize,sigma,thl,bckremove,deconIterations,markov,averWindow);          
+    
+    // Retrieve smoothed spectrum created by the search
+    TH1F *d = new TH1F("d","",nbins,0,nbins); 
+    for (int j = 0; j < nbins; j++) d->SetBinContent(j + 1,destVector[j]);
+    d->SetLineColor(kRed);               
+
+    // Retrieve found peaks amplitude in original and smoothed histograms
+    Double_t *xpeaks = s->GetPositionX();
+    Double_t fPositionX_horiginal[100];
+    Double_t fPositionY_horiginal[100];
+    Double_t fPositionX_hsmoothed[100];
+    Double_t fPositionY_hsmoothed[100];
+    for (int i = 0; i < nfound; i++) {
+       double a=xpeaks[i];
+       Int_t bin = 1 + Int_t(a + 0.5);
+       fPositionX_horiginal[i] = h->GetBinCenter(bin);
+       fPositionY_horiginal[i] = h->GetBinContent(bin);
+       fPositionX_hsmoothed[i] = d->GetBinCenter(bin);
+       fPositionY_hsmoothed[i] = d->GetBinContent(bin);
+    }
+    
     // Turn array to vector
+    vector<double> vmax, vmax_amp;    
     for (int i=0; i<nfound; i++){
-        v.push_back(positionsX[i]);
+        vmax.push_back(fPositionX_hsmoothed[i]);
+        vmax_amp.push_back(fPositionY_hsmoothed[i]);        
     }
 
-    max = v;
-
+    max = vmax;
+    max_amplitude = vmax_amp;
+    
     delete s;
-
+    delete d;
+    
     //cout << "ncrit = " << ncrit;
     //vector<double>::iterator i;
     //cout << " | minimums at : ";
@@ -4045,10 +4075,16 @@ void TOTCalib::DrawFullPixelCalib2(int pix) {
 		int nCalibPoints = (int)calibPoints.size();
 		double pos_offset = 1.;
 		// Check if it's possible to draw
-		if ( (int) peaks.size() < nCalibPoints ) {
+		if ( (int) peaks.size() == 0 ) {
 			cout << "Not enough peaks were identified for this pixel !" << endl;
 			return;
 		}
+        
+        if ( (int) peaks.size() == 1 ) {
+			cout << "Not enough peaks were identified for this pixel !" << endl;
+            peaks.push_back(peaks.at(0));
+		}
+        
 
         // Fit on data
         TString funcName = "f_histofit_";
@@ -4303,10 +4339,10 @@ CalibHandler::CalibHandler (string source) {
 	} else if ( ! TString(source).CompareTo( "Cd_fluo_TPXGaAs", TString::kIgnoreCase )
     ) {
 
-        m_calibPoints[0] = 10.5; // K-alpha peak of As
+//        m_calibPoints[0] = 10.5; // K-alpha peak of As
+//        m_calibPointsRegion[0] = __linear_reg;
+        m_calibPoints[0] = 23.1; // K-alpha peak of Cd 
         m_calibPointsRegion[0] = __linear_reg;
-        m_calibPoints[1] = 23.1; // K-alpha peak of Cd 
-        m_calibPointsRegion[1] = __linear_reg;
 
     } else if ( ! TString(source).CompareTo( "Am241CutLow_Plus_SnFluo", TString::kIgnoreCase )
 			||
