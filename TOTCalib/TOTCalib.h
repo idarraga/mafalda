@@ -391,6 +391,7 @@ public :
 
     void WriteCalibToAsciiFiles(TString);
     void Choose2LinearPeaks(double p1, double p2){m_linearPeak1=p1;m_linearPeak2=p2;}
+    void SetLowEnergyPeak(double p1){m_lowenPeak=p1;}    
     void DrawFullPixelCalib_coeff_histos();
 
     
@@ -505,6 +506,7 @@ private:
 
     double m_linearPeak1;
     double m_linearPeak2;
+    double m_lowenPeak;    
 };
 
 #endif
