@@ -1686,7 +1686,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
     
 	ReorderSources();
     
-	CreateGlobalKernelAndGetCriticalPoints();
+	//CreateGlobalKernelAndGetCriticalPoints();
 
     //ParametersEstimation(m_calMethod); // must be placed after the definition of m_gf_lowe
 
@@ -2680,7 +2680,7 @@ void TOTCalib::Finalize(){
 	vector< vector<double> > spectrum;
 	map<int, double> CHpoints; // points defined in calib handler object
 	map<int, int> CHregions; // regions defined in calib handler object
-	map<int, vector<double> > k_max; // identified peaks (required by DrawFullPixelCalib)
+	unordered_map<int, vector<double> > k_max; // identified peaks (required by DrawFullPixelCalib)
 	int peakMethod;
 
 	for(i = m_allSources.begin() ; i != m_allSources.end() ; i++ ) {
@@ -2832,7 +2832,7 @@ bool TOTCalib::PixelInLowActivityList(int pix){
 vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib * s ) {
 
 	// These are the identified peaks.  There could be one more than expected which is usually artificial.
-	map<int, vector<double> > s_tot = s->GetMaxPeaksIdentified();
+	unordered_map<int, vector<double> > s_tot = s->GetMaxPeaksIdentified();
 	vector<double> peaks = s_tot[pix];
 
     string source_name = s->GetCalibHandler()->GetSourcename();
@@ -2945,11 +2945,11 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib * s ) {
 
 	// These are the identified peaks.  There could be one more than expected which is usually artificial.
-	map<int, vector<double> > s_tot = s->GetMaxPeaksIdentified();
-    map<int, vector<double> > s_tot_amp = s->GetMaxPeaksIdentified_amplitude();    
+	unordered_map<int, vector<double> > s_tot = s->GetMaxPeaksIdentified();
+    unordered_map<int, vector<double> > s_tot_amp = s->GetMaxPeaksIdentified_amplitude();    
 	vector<double> peaks = s_tot[pix];
     vector<double> peaks_amplitude = s_tot_amp[pix];
-
+    
     string source_name = s->GetCalibHandler()->GetSourcename();
 	double loc_bandwidth = s->GetKernelBandWidth(); 
 

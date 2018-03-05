@@ -30,6 +30,7 @@
 #include <queue>
 #include <map>
 #include <algorithm>
+#include <unordered_map>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -183,10 +184,10 @@ public :
 	int GetCriticalPoints(int i , vector<double> &, vector<double> &);
     int GetCriticalPoints2(int pixID , vector<double> &, vector<double> &);
     int GetSign(double slope);
-	map<int, vector<double> > GetMaxPeaksIdentified(){ return m_critPointsMax; };
-    map<int, vector<double> > GetMaxPeaksIdentified_amplitude(){ return m_critPointsMax_amplitude; };	
-    CalibHandler * GetCalibHandler(){ return m_calhandler; };
-	vector< pair<double, double> > GetCalibPoints(int pix){ return m_calibPoints_E_TOTfit[pix]; };
+	unordered_map<int, vector<double> > GetMaxPeaksIdentified(){ return m_critPointsMax;}
+    unordered_map<int, vector<double> > GetMaxPeaksIdentified_amplitude(){ return m_critPointsMax_amplitude; }	
+    CalibHandler * GetCalibHandler(){ return m_calhandler; }
+	vector< pair<double, double> > GetCalibPoints(int pix){ return m_calibPoints_E_TOTfit[pix]; }
 	TF1 * GetSurrogateFunction(int);
 	TGraphErrors * GetCalibGraph(int pix);
 	void RandomFitParametersSurrogate (TF1 * f, double, double);
@@ -324,7 +325,7 @@ public :
 		m_calhandler = new CalibHandler(s.Data());
 	};
 
-	void DumpSourceInfoFromSavedFile(map<int, double> p, map<int, int> r, map<int, vector<double> > max, int peakMethod){
+	void DumpSourceInfoFromSavedFile(map<int, double> p, map<int, int> r, unordered_map<int, vector<double> > max, int peakMethod){
 		m_calhandler->Set_m_calibPoints(p);
 		m_calhandler->Set_m_calibPointsRegion(r);
 		m_critPointsMax = max;
@@ -418,8 +419,8 @@ private:
 	TF1 ** m_kerneldensityfunctions;
 
 	// key = pixel, val = vector of critical points
-	map<int, vector<double> > m_critPointsMax;
-    map<int, vector<double> > m_critPointsMax_amplitude;    
+	unordered_map<int, vector<double> > m_critPointsMax;
+    unordered_map<int, vector<double> > m_critPointsMax_amplitude;    
 	// key = pixel, val = vector of critical points
 	map<int, vector<double> > m_critPointsMin;
 	// This map contains the final: a,b,c,t parameters of the calibration
