@@ -682,8 +682,8 @@ int TOTCalib::PeakFit2_gaussian(TOTCalib * src, int /*pix*/, int tot, TF1 * f, T
     if(leftBin > 1) leftBin--;
 
     // define maxf and minf
-    maxf = h->GetBinCenter(rightBin)+10;
-    minf = h->GetBinCenter(leftBin)-10;
+    maxf = h->GetBinCenter(rightBin)+20;
+    minf = h->GetBinCenter(leftBin)-20;
 
 	if(minf < 1) minf = 1; // correct for negative or zero minf value
 
@@ -758,7 +758,7 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, TF1 * f, TH1 * h,
 //    }
     
     f->SetParNames("gconst","sigma","c","t","e1","s1","e2","s2","mean");
-    f->SetParameter(0,h->GetMaximum()*0.4);
+    f->SetParameter(0,60);
     f->SetParameter(1,10.);
     f->SetParameter(2,200.);
     f->SetParameter(3,1.);
@@ -1042,8 +1042,7 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
     // Fill graph 
     g->SetPoint(cntr, energy , tot_at_max_fit ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
     g->SetPointError(cntr, 0., sigmafit );
-
-    
+  
     sto->pointsSave_ia.push_back(a);
     sto->pointsSave_ib.push_back(b);
     sto->pointsSave_ic.push_back(c);
@@ -1709,13 +1708,14 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
     int nsources = m_allSources.size();
 	double percentage = 0.;
     int nBadPixels = 0;
+    int nfailedFits_slin2 = 0, nfailedFits_slin1 = 0, nfailedFits_slow = 0;
     // ***********************************************************************************************************
 	// ************************************  iterate over pixels   ***********************************************
     // ***********************************************************************************************************
 	for (int pix = m_minpix ; pix <= m_maxpix ; pix++) {
 
 		// Skip the bad pixels
-		if ( PixelInBadPixelList(pix) ) continue;
+        if ( PixelInBadPixelList(pix) ) continue;
 
 		// Vectors to save the fit constants and properties
 		vector<double> calibConst;
@@ -1759,6 +1759,12 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
 			for (int i = 0 ; i < nsources - 1  ; i++ ) {
                 TOTCalib* source = m_allSources.at(i);
 				ProcessOneSource2_gaussian(source, st, g, pix, cntr);
+                
+                if (i==0) {
+                    if ((st->peakFitStatus).at(0)!=0) nfailedFits_slin1++;; 
+                } else {
+                    if ((st->peakFitStatus).at(1)!=0) nfailedFits_slin2++;                
+                }
 			}
 
             if(m_verbose <= __VER_INFO) {
@@ -1766,7 +1772,8 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
             }
 
             // Finish with low energy fit
-            ProcessOneSource2_lowen(m_allSources.at(nsources-1), st, g, pix, cntr,a,b,c,t);             
+            ProcessOneSource2_lowen(m_allSources.at(nsources-1), st, g, pix, cntr,a,b,c,t);
+            if ((st->peakFitStatus).at(2)!=0) nfailedFits_slow++;
 		}
         // --------------------------------------------------------------------------------------------------------
         
@@ -1784,7 +1791,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
             t = 0.;
             chi2ndf = 0.;
 		}		
-
+        
         // store coeff for ASCII files
         calibConst.push_back( a );
         calibConst.push_back( b );
@@ -1828,6 +1835,11 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
     // ********************************************************************************************************** 
       
     }
+    
+    cout<<"Number of pixels with failed fit on the Am spectrum: "<<nfailedFits_slin2<<endl;
+    cout<<"Number of pixels with failed fit on the Cd spectrum: "<<nfailedFits_slin1<<endl;
+    cout<<"Number of pixels with failed fit on the Cu spectrum: "<<nfailedFits_slow<<endl;
+    cout<<"Number of pixels in bad pixel list: "<<nBadPixels<<endl;
     
     // finish the progress bar
 	printProgBar( (int) 100 );
@@ -2992,8 +3004,26 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
         int index = std::distance(peaks_amplitude.begin(), result);
         peaks.erase(peaks.begin()+index);
         peaks_amplitude.erase(peaks_amplitude.begin()+index);
-	}
+	}   
 
+    // !!!! TO REMOVE (temporary solution) !!!!!!
+    // Remove too small peaks
+    double thl = 0.3; // fraction of highest peak amplitude below which other peaks will be removed     
+    if (peaks.size()>1){
+    
+        double max_amplitude = *std::max_element(peaks_amplitude.begin(), peaks_amplitude.end());
+        vector<double>::iterator i2 = peaks.begin();
+        vector<double>::iterator j2 = peaks_amplitude.begin();  
+        for ( ; i2 != peaks.end() && j2!=peaks_amplitude.end(); ){
+            if (*j2<max_amplitude*thl){
+                i2 = peaks.erase(i2);
+                j2 = peaks_amplitude.erase(j2);
+            } else {
+                ++i2; ++j2;
+            }
+        }        
+    }     
+    
     // Sort peaks in ascending order 
     std::sort (peaks.begin(), peaks.end());
     
@@ -3020,7 +3050,7 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
         peaks.push_back(peaks.at(0)); 
         if (m_verbose <= __VER_INFO){cout<<"Adding an artificial peak."<<endl;}       
 	}
-    
+        
 	if(m_verbose == __VER_DEBUG) cout << "First guess, points for : " <<  s->GetCalibHandler()->GetSourcename() <<  "  |  ";
 
 	for (int p = 0 ; p < (int)calibPoints.size() ; p++) {
@@ -3096,12 +3126,12 @@ int TOTCalib::GetCriticalPoints(int pixID, vector<double> & min, vector<double> 
 int TOTCalib::GetCriticalPoints2(int pixID, vector<double> & max, vector<double> & max_amplitude){
    
     // To tune
-    Double_t sigma = m_bandwidth;
-    Double_t thl = 1; // in % for high res and normalized to 1 for normal search
+    Double_t sigma = m_bandwidth/(Double_t)m_histoRebinning;
+    Double_t thl = 1; // according to TPSpectrum doc: percentage of highest peak amplitude, below which other peaks will be ignored (does not seems true...)
     bool bckremove = false;
-    Int_t deconIterations = 3;
-    bool markov = false;
-    Int_t averWindow = 2; // applies only if markov = true
+    Int_t deconIterations = 1;
+    bool markov = true;
+    Int_t averWindow = 3/(Double_t)m_histoRebinning; // applies only if markov = true
         
     // Search
     TSpectrum *s = new TSpectrum(100);
@@ -3114,7 +3144,7 @@ int TOTCalib::GetCriticalPoints2(int pixID, vector<double> & max, vector<double>
     int nfound = s->SearchHighRes(sarray,destVector,ssize,sigma,thl,bckremove,deconIterations,markov,averWindow);          
     
     // Retrieve smoothed spectrum created by the search
-    TH1F *d = new TH1F("d","",nbins,0,nbins); 
+    TH1F *d = new TH1F("d","",nbins,0,nbins*m_histoRebinning); 
     for (int j = 0; j < nbins; j++) d->SetBinContent(j + 1,destVector[j]);
     d->SetLineColor(kRed);               
 
@@ -3402,24 +3432,25 @@ TH1I * TOTCalib::GetHisto(int pix, TString extraName){
 		name += "_";
 	}
 	name += pix;
-	TH1I * h = new TH1I(name, name, m_histoRebinning, 0, m_nbins);
+	TH1I * h = new TH1I(name, name, m_nbins, 0, m_nbins);
 
 	vector<double> hist = m_calibhistos[pix];
 	vector<double>::iterator i = hist.begin();
 
-	int cntr = 0;
+	int cntr = 1;
 	for ( ; i != hist.end() ; i++) {
-		h->SetBinContent(h->FindBin(cntr), *i);
+		h->SetBinContent(cntr, *i);
 		cntr++;
 	}
+    
+    if (m_histoRebinning>1) h->Rebin(m_histoRebinning);
 
-	map<int, int> reg = m_calhandler->GetCalibPointsRegion();
-	for(unsigned int j=0; j < reg.size(); j++){
-		if (reg[j]==CalibHandler::__lowenergy_reg){h->Rebin(2, ""); break;}
-	}
+//	map<int, int> reg = m_calhandler->GetCalibPointsRegion();
+//	for(unsigned int j=0; j < reg.size(); j++){
+//		if (reg[j]==CalibHandler::__lowenergy_reg){h->Rebin(2, ""); break;}
+//	}
 
 	return h;
-
 }
 
 TF1 * TOTCalib::GetKernelDensityFunction(int i){
@@ -3535,7 +3566,7 @@ void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int 
 
 	// The number of bins per histogram will be set equal to the max tot in the distributions
 	m_nbins = maxtot;
-	m_histoRebinning = m_nbins; //m_nbins/8;
+	m_histoRebinning = 1; //rebin factor (1 = no rebinning)
 	m_nFrames = nFrames;
 	m_peakMethod = method;
 
@@ -3629,7 +3660,6 @@ void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int 
 	m_ranseed_time = unsigned ( rawtime );
 	cout << "[RAND] The random seed (localtime): " << m_ranseed_time << endl;
 	m_rand1 = new TRandom1(m_ranseed_time);
-
 }
 
 TOTCalib::~TOTCalib() {
