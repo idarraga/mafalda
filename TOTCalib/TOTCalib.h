@@ -393,10 +393,11 @@ public :
 		globalEstimationSuccess = true; };
 
     void WriteCalibToAsciiFiles(TString);
-    void Choose2LinearPeaks(double p1, double p2){m_linearPeak1=p1;m_linearPeak2=p2;}
-    void SetLowEnergyPeak(double p1){m_lowenPeak=p1;}    
+    void Choose2LinearPeaks(double p1, double p2){m_linearPeak1=p1;m_linearPeak2=p2;return;}
+    void SetLowEnergyPeak(double p1){m_lowenPeak=p1;return;}    
     void DrawFullPixelCalib_coeff_histos();
-
+    void SetLowEnFit_Params(double cons, double sig, double c, double t){m_lowen_fitParams[0]=cons; m_lowen_fitParams[1]=sig; m_lowen_fitParams[2]=c; m_lowen_fitParams[3]=t;return;}
+    Double_t* GetLowEnFit_Params(){return m_lowen_fitParams;}
     
 private:
 	//////////////////////////////////////////////////////////////////
@@ -512,7 +513,8 @@ private:
 
     double m_linearPeak1;
     double m_linearPeak2;
-    double m_lowenPeak;    
+    double m_lowenPeak;  
+    Double_t m_lowen_fitParams[4]; // constant, sigma, c, t
 };
 
 #endif

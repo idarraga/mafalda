@@ -757,11 +757,12 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, TF1 * f, TH1 * h,
 //        }
 //    }
     
+    Double_t* params = src->GetLowEnFit_Params();
     f->SetParNames("gconst","sigma","c","t","e1","s1","e2","s2","mean");
-    f->SetParameter(0,60);
-    f->SetParameter(1,10.);
-    f->SetParameter(2,200.);
-    f->SetParameter(3,1.);
+    f->SetParameter(0,params[0]);
+    f->SetParameter(1,params[1]);
+    f->SetParameter(2,params[2]);
+    f->SetParameter(3,params[3]);
     f->FixParameter(4,e1);
     f->FixParameter(5,s1);
     f->FixParameter(6,e2);
@@ -1714,9 +1715,6 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
     // ***********************************************************************************************************
 	for (int pix = m_minpix ; pix <= m_maxpix ; pix++) {
 
-		// Skip the bad pixels
-        if ( PixelInBadPixelList(pix) ) continue;
-
 		// Vectors to save the fit constants and properties
 		vector<double> calibConst;
 		vector<double> calibProperties;
@@ -1790,6 +1788,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
             c = 0.;
             t = 0.;
             chi2ndf = 0.;
+            nBadPixels++;
 		}		
         
         // store coeff for ASCII files
@@ -1827,8 +1826,8 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
             printProgBar( (int) percentage );
         }   
 
-        if ((nBadPixels>0) &&(nBadPixels % 1000 == 0)){
-            cout<<"!!!! WARNING: "<<nBadPixels<<" bad pixels."<<endl;
+        if ((nBadPixels>0) && (nBadPixels % 1000 == 0)){
+            cout<<endl<<"!!!! WARNING: "<<nBadPixels<<" pixels failed so far !!!!"<<endl;
         }
     // ********************************************************************************************************** 
     // **********************************************************************************************************     
@@ -1836,14 +1835,16 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
       
     }
     
-    cout<<"Number of pixels with failed fit on the Am spectrum: "<<nfailedFits_slin2<<endl;
-    cout<<"Number of pixels with failed fit on the Cd spectrum: "<<nfailedFits_slin1<<endl;
-    cout<<"Number of pixels with failed fit on the Cu spectrum: "<<nfailedFits_slow<<endl;
-    cout<<"Number of pixels in bad pixel list: "<<nBadPixels<<endl;
-    
     // finish the progress bar
 	printProgBar( (int) 100 );
 	cout << endl;
+   
+    cout<<endl;
+    cout<<"Number of pixels with failed fit on the 1st spectrum: "<<nfailedFits_slin1<<endl;
+    cout<<"Number of pixels with failed fit on the 2nd spectrum: "<<nfailedFits_slin2<<endl;
+    cout<<"Number of pixels with failed fit on the 3rd spectrum (low energy): "<<nfailedFits_slow<<endl;
+    cout<<"Total number of pixels with failed calibration: "<<nBadPixels<<endl;
+
     
     WriteCalibToAsciiFiles(outputName);
     return;
@@ -3130,7 +3131,7 @@ int TOTCalib::GetCriticalPoints2(int pixID, vector<double> & max, vector<double>
     Double_t thl = 1; // according to TPSpectrum doc: percentage of highest peak amplitude, below which other peaks will be ignored (does not seems true...)
     bool bckremove = false;
     Int_t deconIterations = 1;
-    bool markov = true;
+    bool markov = false;
     Int_t averWindow = 3/(Double_t)m_histoRebinning; // applies only if markov = true
         
     // Search
@@ -3660,6 +3661,12 @@ void TOTCalib::SetupJob(TString fn, TString source, int minpix, int maxpix, int 
 	m_ranseed_time = unsigned ( rawtime );
 	cout << "[RAND] The random seed (localtime): " << m_ranseed_time << endl;
 	m_rand1 = new TRandom1(m_ranseed_time);
+    
+    m_lowen_fitParams[0] = 100.; // constant
+    m_lowen_fitParams[1] = 10.; // sigma
+    m_lowen_fitParams[2] = 200.; // c
+    m_lowen_fitParams[3] = 1.; // t
+    
 }
 
 TOTCalib::~TOTCalib() {
