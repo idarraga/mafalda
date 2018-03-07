@@ -884,7 +884,7 @@ void TOTCalib::ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int
 
 }
 
-void TOTCalib::ProcessOneSource2_gaussian(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr) {
+void TOTCalib::ProcessOneSource2_gaussian(TOTCalib * s, store * sto, int pix) {
 
     // !!! TO FIX: only support one point per source for now !!!!!
     // energies in this vector are in absolute value (for peak order)
@@ -929,16 +929,10 @@ void TOTCalib::ProcessOneSource2_gaussian(TOTCalib * s, store * sto, TGraphError
 
         delete gf;
         delete hf;
-        cntr++;
 
     } else {
         if(m_verbose == __VER_DEBUG) {cout << "Did not find exactly one peak for this source. Calib failed.";}
-        cntr++;
     }
-
-    // Add point in the graph
-    g->SetPoint(cntr, energy, totmeanfit ); // E, TOT (from the fit in this context)
-    g->SetPointError(cntr, 0., sigmafit );
 
     // Store results
     sto->pointsSave_ia.push_back( 0. );
@@ -957,7 +951,7 @@ void TOTCalib::ProcessOneSource2_gaussian(TOTCalib * s, store * sto, TGraphError
     return;
 }
 
-void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr, double & a, double & b, double & c, double & t) {
+void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, int pix, double & a, double & b, double & c, double & t) {
 
 	// Set of points
 	vector< pair<double, double> > points = Extract_E_TOT_Points2 ( pix, s ) ; // energies in this vector are in absolute value (for peak order)    
@@ -1015,16 +1009,11 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, TGraphErrors *
         
         delete gf;
         delete hf;
-        cntr++;        
     
     }else{
         if(m_verbose <= __VER_INFO) cout<<"Did not find the low energy point... Calib failed for this pixel"<<endl;
     }
 
-    // Fill graph 
-    g->SetPoint(cntr, energy , tot_at_max_fit ); // for gf_lowe the tot point is not a gaussian mean but the tot (x coordinate) at the function maximum
-    g->SetPointError(cntr, 0., sigmafit );
-  
     sto->pointsSave_ia.push_back(a);
     sto->pointsSave_ib.push_back(b);
     sto->pointsSave_ic.push_back(c);
@@ -1712,7 +1701,6 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
 
 		// Set of vectors used to store info
 		store * st = new store;
-		TGraphErrors * g = 0x0;
         
         // Calib constant to save
         double a = 0.;
@@ -1723,11 +1711,6 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         // ---------------------------------   Proceed with the fits   ---------------------------------------
         if ( totalNPoints > 0 ) {
 
-            // Graph for draw
-            g = new TGraphErrors(totalNPoints); 
-			int cntr = 0; // Counter for points in TGraphErrors
-
-
             if(m_verbose <= __VER_INFO) {            
                 cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
             }    
@@ -1735,7 +1718,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
             // Start with gaussian fits (low energy fit should be at the end of the vector)
 			for (int i = 0 ; i < nsources - 1  ; i++ ) {
                 TOTCalib* source = m_allSources.at(i);
-				ProcessOneSource2_gaussian(source, st, g, pix, cntr);               
+				ProcessOneSource2_gaussian(source, st, pix);               
 			}
             
             if(m_verbose <= __VER_INFO) {
@@ -1743,7 +1726,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
             }
 
             // Finish with low energy fit
-            ProcessOneSource2_lowen(m_allSources.at(nsources-1), st, g, pix, cntr,a,b,c,t);
+            ProcessOneSource2_lowen(m_allSources.at(nsources-1), st,pix,a,b,c,t);
             
             // Flags for failed fits
             if ((st->peakFitStatus).at(0)!=0) nfailedFits_slin1++;; 
@@ -1795,7 +1778,6 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
     // --------------------------------------------------------------------------------------------------------
 
         // Delete TGraph and store object
-        if(g) delete g;
         if(st) delete st;
         
         if(pix%100 == 0) { // refresh progress bar every 1000 frames

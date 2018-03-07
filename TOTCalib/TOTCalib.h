@@ -215,8 +215,8 @@ public :
     TH1I *GetHistoCalibrated(int, TString, double, double *, double *, double *, double *);
     
 	void ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
-    void ProcessOneSource2_gaussian(TOTCalib *, store *, TGraphErrors *, int, int &);
-    void ProcessOneSource2_lowen(TOTCalib *, store *, TGraphErrors *, int, int &, double &, double &, double &, double &);	
+    void ProcessOneSource2_gaussian(TOTCalib *, store *, int);
+    void ProcessOneSource2_lowen(TOTCalib *, store *, int, double &, double &, double &, double &);	
     void ReorderSources();
 
 	//int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *);
