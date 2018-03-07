@@ -645,7 +645,7 @@ int TOTCalib::PeakFit(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, st
 	return status;
 }
 
-int TOTCalib::PeakFit2_gaussian(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h, store * sto) {
+int TOTCalib::PeakFit2_gaussian(TOTCalib * src, int /*pix*/, int tot, TF1 * f, TH1 * h) {
 
     double loc_bandwidth = src->GetKernelBandWidth();
 	double minf;
@@ -703,7 +703,7 @@ int TOTCalib::PeakFit2_gaussian(TOTCalib * src, int /*pix*/, int tot, TF1 * f, T
 	return status;
 }
 
-int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, TF1 * f, TH1 * h, store * sto, double energy) {
+int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, TF1 * f, TH1 * h, store * sto, double energy) {
 
     TString fitconfig = "NQS";
 	if(m_verbose == __VER_DEBUG_LOOP) fitconfig = "NS";
@@ -914,7 +914,7 @@ void TOTCalib::ProcessOneSource2_gaussian(TOTCalib * s, store * sto, int pix) {
         // Fit in the peak
         TF1 * gf = new TF1("gf_linear", "gaus(0)", 0., s->GetNBins());
         gf->SetParameters(1, 1, m_bandwidth);
-        status = PeakFit2_gaussian(s, pix, totval_kernel, gf, hf, sto);
+        status = PeakFit2_gaussian(s, pix, totval_kernel, gf, hf);
 
         // Retrieve fitted parameters
         constantfit = gf->GetParameter(0);
@@ -978,7 +978,7 @@ void TOTCalib::ProcessOneSource2_lowen(TOTCalib * s, store * sto, int pix, doubl
         
         // Fit in the peak
         TF1 * gf = new TF1("gf_lowe", fitfunc_lowen2, 0.,s->GetNBins(),9);
-        status = PeakFit2_lowen(s, pix, tot_at_max_kernel, gf, hf, sto, energy);
+        status = PeakFit2_lowen(s, pix, gf, hf, sto, energy);
     
         if (status == 0){ // minimzer status code for good fit
 
@@ -1741,7 +1741,7 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         int surrogateStatus = 0;
         int goodFitCounter = count(allstatus.begin(), allstatus.end(), 0);
         double chi2ndf = st->pointsSave_chi2ndf.at(m_allSources.size()-1 );
-        if ( goodFitCounter != m_allSources.size() ){ // in case of any problem with any fit
+        if ( goodFitCounter != nsources ){ // in case of any problem with any fit
             surrogateStatus = -1;
             a = 0.; // a = 0 is the condition for failed pixel calib in mafalda
             b = 0.;
@@ -2722,10 +2722,10 @@ TH1F * TOTCalib::CreateParameterHistogram(vector<double> v, TString name){
 TF1 * TOTCalib::GetSurrogateFunction(int pix) {
 
 	//first check which parametrization was used (standard or low energy)
-	vector<TOTCalib *>::iterator i = m_allSources.begin();
+	/*vector<TOTCalib *>::iterator i = m_allSources.begin();
 	map<int, int>::iterator reg_i;
 	//bool e0_parametrization = false;
-	/*for( ; i != m_allSources.end() ; i++ ) {
+	for( ; i != m_allSources.end() ; i++ ) {
 		map<int, int> reg = (*i)->GetCalibHandler()->GetCalibPointsRegion();
 		reg_i = reg.begin();
 		for ( ; reg_i != reg.end() ; reg_i++ ) {
@@ -4090,7 +4090,6 @@ void TOTCalib::DrawFullPixelCalib2(int pix) {
 		map<int, double> calibPoints = m_allSources[sour]->GetCalibHandler()->GetCalibPoints();
 		vector<double> peaks = (m_allSources[sour]->GetMaxPeaksIdentified())[pix];
 
-		int nCalibPoints = (int)calibPoints.size();
 		double pos_offset = 1.;
 		// Check if it's possible to draw
 		if ( (int) peaks.size() == 0 ) {

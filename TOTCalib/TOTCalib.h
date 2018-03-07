@@ -221,8 +221,8 @@ public :
 
 	//int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *);
     int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *, double = 0.0); 
-    int PeakFit2_gaussian(TOTCalib *, int, int, TF1 *, TH1 *, store *);    
-    int PeakFit2_lowen(TOTCalib *, int, int, TF1 *, TH1 *, store *, double = 0.0);
+    int PeakFit2_gaussian(TOTCalib *, int, int, TF1 *, TH1 *);    
+    int PeakFit2_lowen(TOTCalib *, int, TF1 *, TH1 *, store *, double = 0.0);
 	TF1 * FittingFunctionSelector(double, TOTCalib *, int);
 	void GetLinearFit(double & a, double & b, vector< pair<double,double> > p);
 	void RandomFitParameters(TF1 * f, TH1 * h, int tot, TOTCalib *);
