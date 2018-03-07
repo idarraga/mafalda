@@ -682,8 +682,8 @@ int TOTCalib::PeakFit2_gaussian(TOTCalib * src, int /*pix*/, int tot, TF1 * f, T
     if(leftBin > 1) leftBin--;
 
     // define maxf and minf
-    maxf = h->GetBinCenter(rightBin)+20;
-    minf = h->GetBinCenter(leftBin)-20;
+    maxf = h->GetBinCenter(rightBin);
+    minf = h->GetBinCenter(leftBin);
 
 	if(minf < 1) minf = 1; // correct for negative or zero minf value
 
@@ -705,15 +705,11 @@ int TOTCalib::PeakFit2_gaussian(TOTCalib * src, int /*pix*/, int tot, TF1 * f, T
 
 int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, TF1 * f, TH1 * h, store * sto, double energy) {
 
-	double loc_bandwidth = src->GetKernelBandWidth();
-    double minf = 1;
-    double maxf = tot + loc_bandwidth*3;
-
     TString fitconfig = "NQS";
-	if(m_verbose == __VER_DEBUG_LOOP) fitconfig = "NSW";
+	if(m_verbose == __VER_DEBUG_LOOP) fitconfig = "NS";
 
 	if(m_verbose <= __VER_INFO) {
-		cout << "--> FITTING PEAKS "<<endl<< "[FIT] Fit in the interval : " << minf << ", " << maxf << " with options : " << fitconfig << endl;
+		cout << "--> FITTING PEAKS "<<endl<< "[FIT] Fit in the interval : " << 0 << ", " << src->GetNBins() << " with options : " << fitconfig << endl;
 	}
 
     Double_t a = 0.;
@@ -742,21 +738,6 @@ int TOTCalib::PeakFit2_lowen(TOTCalib * src, int pix, int tot, TF1 * f, TH1 * h,
         return status;
     }
             
-//    if (globalEstimationSuccess){ // following part is kind of ad hoc, values may be changed
-//        // sigma tends to be too small if fit doesn't converge fast enough
-//        f->SetParLimits(2, TMath::Max( (Double_t) 0., m_glob_sig.first-m_glob_sig.second*10 ), m_glob_sig.first+m_glob_sig.second*10 );
-//        f->SetParameter(3,a); //use linear fit instead of random parameters
-//        f->SetParameter(4,b);
-//        f->SetParLimits(3, TMath::Max( (Double_t) 0., a-m_glob_a.second*5) ,a+m_glob_a.second*5);
-//        f->SetParLimits(4, TMath::Max( (Double_t) 0., b-m_glob_b.second*5) ,b+m_glob_b.second*5);      
-//    } else{
-//        f->SetParLimits(0, h->GetMaximum()*0.4, h->GetMaximum()*1.6); // amplitude tends to be huge if fit doesn't converge fast enough
-//        if (a!=0. && b!=0.){ // cannot estimate boundaries
-//            f->FixParameter(3,a);
-//            f->FixParameter(4,b);
-//        }
-//    }
-    
     Double_t* params = src->GetLowEnFit_Params();
     f->SetParNames("gconst","sigma","c","t","e1","s1","e2","s2","mean");
     f->SetParameter(0,params[0]);
@@ -1742,35 +1723,31 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         // ---------------------------------   Proceed with the fits   ---------------------------------------
         if ( totalNPoints > 0 ) {
 
+            // Graph for draw
             g = new TGraphErrors(totalNPoints); 
+			int cntr = 0; // Counter for points in TGraphErrors
 
-			// Counter for points in TGraphErrors
-			int cntr = 0;
 
             if(m_verbose <= __VER_INFO) {            
                 cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
-            }else{
-                if (pix % 1000 == 0) cout<<endl<<"Processing pixel : "<<pix<<endl;
-            }       
+            }    
             
             // Start with gaussian fits (low energy fit should be at the end of the vector)
 			for (int i = 0 ; i < nsources - 1  ; i++ ) {
                 TOTCalib* source = m_allSources.at(i);
-				ProcessOneSource2_gaussian(source, st, g, pix, cntr);
-                
-                if (i==0) {
-                    if ((st->peakFitStatus).at(0)!=0) nfailedFits_slin1++;; 
-                } else {
-                    if ((st->peakFitStatus).at(1)!=0) nfailedFits_slin2++;                
-                }
+				ProcessOneSource2_gaussian(source, st, g, pix, cntr);               
 			}
-
+            
             if(m_verbose <= __VER_INFO) {
                 cout << "Got " << st->linearpairs.size() << " pairs in the linear part." << endl;
             }
 
             // Finish with low energy fit
             ProcessOneSource2_lowen(m_allSources.at(nsources-1), st, g, pix, cntr,a,b,c,t);
+            
+            // Flags for failed fits
+            if ((st->peakFitStatus).at(0)!=0) nfailedFits_slin1++;; 
+            if ((st->peakFitStatus).at(1)!=0) nfailedFits_slin2++;                                    
             if ((st->peakFitStatus).at(2)!=0) nfailedFits_slow++;
 		}
         // --------------------------------------------------------------------------------------------------------
