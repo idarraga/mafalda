@@ -4695,40 +4695,6 @@ pair<double,double> Calculate_ab_From_ct_e1s1_e2s2(double c, double t, double e1
     double a = (s1-s2)/(e1-e2) - c/((e2-t)*(e1-t));
     double b = (1/(e1-e2)) * (e1*s2 - e2*s1 + (e1*c)/(e2-t) - (e2*c)/(e1-t));
 
-    // Numerically
-//    ROOT::Math::GSLMultiRootFinder rr(0);
-//    // Verbosity
-////    cout<<"-------------------------------------------------------------------------"<<endl;
-////    cout<<"** c: "<<c<<" t: "<<t<<" e1: "<<e1<<" s1: "<<s1<<" e2: "<<e2<<" s2: "<<s2<<endl;
-////    rr.SetPrintLevel(0);
-//    //gErrorIgnoreLevel = kFatal;
-//    // Functions
-//    TF2 * func_Am = new TF2("f1","[0]*x-[1]+y-[2]/([0]-[3])");//,0,1000,-1000,1000,4); // a = x, b = y, [0] = Energy, [1] = TOT, [2] = c, [3] = t
-//    TF2 * func_Cd = new TF2("f2","[0]*x-[1]+y-[2]/([0]-[3])");//,0,1000,-1000,1000,4);
-//    func_Am->FixParameter(0,e1);
-//    func_Am->FixParameter(1,s1);
-//    func_Am->FixParameter(2,c);
-//    func_Am->FixParameter(3,t);
-//    func_Cd->FixParameter(0,e2);
-//    func_Cd->FixParameter(1,s2);
-//    func_Cd->FixParameter(2,c);
-//    func_Cd->FixParameter(3,t);
-//    // wrap the functions
-//    ROOT::Math::WrappedMultiTF1 g1(*func_Am,2);
-//    ROOT::Math::WrappedMultiTF1 g2(*func_Cd,2);
-//    rr.AddFunction(g1);
-//    rr.AddFunction(g2);
-//    // starting point
-//    double x0[2]={3,90};
-//    //rr.Solve(x0,2,1.); // starting point, max iterations (default 100), abs tolerance (default 1e-06)
-//    rr.Solve(x0);
-//    const double* sol = rr.X();
-//    Double_t a = sol[0];
-//    Double_t b = sol[1];
-//    //cout<<"*** a: "<<a<<" b: "<<b<<endl;
-//    delete func_Am;
-//    delete func_Cd;
-
     return make_pair(a,b); 
 }
 

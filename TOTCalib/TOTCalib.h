@@ -19,8 +19,6 @@
 #include <TGraph.h>
 #include <TGraphErrors.h>
 #include <TRandom1.h>
-#include "Math/MultiRootFinder.h"
-#include "Math/WrappedMultiTF1.h"
 
 // Header file for the classes stored in the TTree if any.
 #include <vector>
