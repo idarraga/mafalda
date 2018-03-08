@@ -396,6 +396,9 @@ public :
     void DrawFullPixelCalib_coeff_histos();
     void SetLowEnFit_Params(double cons, double sig, double c, double t){m_lowen_fitParams[0]=cons; m_lowen_fitParams[1]=sig; m_lowen_fitParams[2]=c; m_lowen_fitParams[3]=t;return;}
     Double_t* GetLowEnFit_Params(){return m_lowen_fitParams;}
+    void OptimizeOnePeak(double thl){m_OptimizeOnePeak_thl=thl;}    
+    Double_t GetOptimizeOnePeak_thl(){return m_OptimizeOnePeak_thl;}  
+    void RemoveSmallPeaks(Double_t, vector<double> &, vector<double> &, int);
     
 private:
 	//////////////////////////////////////////////////////////////////
@@ -513,6 +516,8 @@ private:
     double m_linearPeak2;
     double m_lowenPeak;  
     Double_t m_lowen_fitParams[4]; // constant, sigma, c, t
+    Double_t m_OptimizeOnePeak_thl;    
+    
 };
 
 #endif

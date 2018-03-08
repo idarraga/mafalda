@@ -2933,29 +2933,28 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points (int pix, TOTCalib 
 vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib * s ) {
 
 	// These are the identified peaks.  There could be one more than expected which is usually artificial.
-    vector < vector<double> > s_tot = s->GetMaxPeaksIdentified_vec();
-    vector < vector<double> > s_tot_amp = s->GetMaxPeaksIdentified_amplitude_vec();    
-    vector<double> peaks = s_tot[pix-m_minpix];
-    vector<double> peaks_amplitude = s_tot_amp[pix-m_minpix];
-
-    string source_name = s->GetCalibHandler()->GetSourcename();
-	double loc_bandwidth = s->GetKernelBandWidth(); 
+    vector<double> peaks = (s->GetMaxPeaksIdentified_vec()).at(pix-m_minpix);
+    vector<double> peaks_amplitude = (s->GetMaxPeaksIdentified_amplitude_vec()).at(pix-m_minpix);
 
 	// These are the calib points expected per source
 	map<int, double> calibPoints = s->GetCalibHandler()->GetCalibPoints();
 
-    if ( m_verbose != __VER_QUIET ){ 
+    // Few messages
+    if ( m_verbose <= __VER_INFO ){ 
+        string source_name = s->GetCalibHandler()->GetSourcename();        
         cout<<"------- Source: "<<source_name<<" -------"<<endl;
         cout<<"--> Kernel peak estimation:"<<endl;                
         cout<<"N peaks found = " << peaks.size() << " | Expected peaks = " << calibPoints.size() << endl;
+        
+        // If there is no peaks information coming from the distribution this particular pixel can be noisy or simply masked.
+        // Also is there is less peaks identified than calibration points this pixel can not be processed.
+        if( peaks.size() < calibPoints.size() ) { 
+            cout << "[WARNING] Not enough peaks were identified for pixel " << pix << " and source "<< s->GetCalibHandler()->GetSourcename() <<endl; 
+            cout << "          Calib failed for this pixel." << endl;
+        }
     }
 
-	// If this situation is present determine which peaks to remove
-	// remove as many as necesary
-    if (s->GetPeakMethod() == __peakLowStats && peaks.size()> calibPoints.size() ){
-        peaks = LowStatsPeakSelection(peaks, calibPoints.size(), s, loc_bandwidth); // better peak selection
-    }
-    
+    // Remove extra peaks
 	while( peaks.size() > calibPoints.size() ) { 
 
         // Remove peaks with lowest amplitude in smoothed histogram
@@ -2965,73 +2964,29 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
         peaks.erase(peaks.begin()+index);
         peaks_amplitude.erase(peaks_amplitude.begin()+index);
 	}   
-
-    // !!!! TO REMOVE (temporary solution) !!!!!!
-    // Remove too small peaks
-    double thl = 0.3; // fraction of highest peak amplitude below which other peaks will be removed     
-    if (peaks.size()>1){
-    
-        double max_amplitude = *std::max_element(peaks_amplitude.begin(), peaks_amplitude.end());
-        vector<double>::iterator i2 = peaks.begin();
-        vector<double>::iterator j2 = peaks_amplitude.begin();  
-        for ( ; i2 != peaks.end() && j2!=peaks_amplitude.end(); ){
-            if (*j2<max_amplitude*thl){
-                i2 = peaks.erase(i2);
-                j2 = peaks_amplitude.erase(j2);
-            } else {
-                ++i2; ++j2;
-            }
-        }        
-    }     
-    
-    // Sort peaks in ascending order 
-    std::sort (peaks.begin(), peaks.end());
-    
-	// Resulting points ( E , TOT )
-	vector<pair<double, double> > points;
-
-	// If there is no peaks information coming from the distribution
-	//  this particular pixel can be noisy or simply masked.
-	// Also is there is less peaks identified than calibration points
-	//  this pixel can not be processed.
-	if( peaks.size() < calibPoints.size() ) { 
-        if (m_verbose <= __VER_INFO){
-            cout << "[WARNING] Not enough peaks were identified for pixel " << pix << " and source "<< s->GetCalibHandler()->GetSourcename() <<endl; 
-            cout << "          Calib failed for this pixel." << endl;
-        }
-        // return points;
-	}
-    
-    if( peaks.empty() ) {return points;}
-    
-    // !!!! TO REMOVE (temporary solution) !!!!!!
-    // In case of one peak found only I use it as the peak to fit
-    if( peaks.size() == 1 && calibPoints.size()==2) {
-        peaks.push_back(peaks.at(0)); 
-        if (m_verbose <= __VER_INFO){cout<<"Adding an artificial peak."<<endl;}       
-	}
         
-	if(m_verbose == __VER_DEBUG) cout << "First guess, points for : " <<  s->GetCalibHandler()->GetSourcename() <<  "  |  ";
-
-	for (int p = 0 ; p < (int)calibPoints.size() ; p++) {
-
-		if(m_verbose == __VER_DEBUG) cout << " (" << calibPoints[p] << " , " << peaks[p] << ") ";
-
-		// Energy, TOT
-        double energy = TMath::Abs(calibPoints[p]);
-        if (energy==m_linearPeak1 || energy == m_linearPeak2 || energy == m_lowenPeak){
+    // In case user ask for optimization, remove too small peaks and resize vector to expected number of peaks
+    double thl = s->GetOptimizeOnePeak_thl();
+    if (thl>0.) RemoveSmallPeaks(thl, peaks, peaks_amplitude, calibPoints.size());       
+    
+    // Fill output vector with peaks (E,TOT) if n found peaks matches n expected peaks
+	vector<pair<double, double> > points; // Resulting points ( E , TOT ) 
+    int size_found_peaks = peaks.size();
+    int size_expected_peaks = calibPoints.size();
+    if (size_found_peaks==size_expected_peaks){
+        
+        std::sort (peaks.begin(), peaks.end());         // Sort peaks in ascending order      
+        for (int p = 0 ; p < (int)calibPoints.size() ; p++) {
             
-            points.push_back(
-                    make_pair (
-                            // Energy information for that point
-                            energy, 	// must take absolute value, otherwise order may not be respected;
-                            // TOT 							// ignored points will be associated to wrong peaks
-                            peaks[p]
-                    )
-            );    
+            double tot = TMath::Abs(peaks.at(p));
+            double energy = TMath::Abs(calibPoints[p]);        
+            if(m_verbose == __VER_DEBUG) cout << " (" << energy << " , " << tot << ") ";
+            
+            if (energy==m_linearPeak1 || energy == m_linearPeak2 || energy == m_lowenPeak){     
+                points.push_back(make_pair(energy, tot));
+            }
         }
-
-	}
+    }
 
 	if(m_verbose == __VER_DEBUG) cout << endl;
 	return points;
@@ -4698,3 +4653,61 @@ pair<double,double> Calculate_ab_From_ct_e1s1_e2s2(double c, double t, double e1
     return make_pair(a,b); 
 }
 
+void TOTCalib::RemoveSmallPeaks(Double_t thl, vector<double> & peaks, vector<double> & peaks_amplitude, int n_expected){
+    
+    int nfound = peaks.size();
+    
+    //    // !!!! TO REMOVE (temporary solution) !!!!!!
+    //    // Remove too small peaks
+    //    double thl = 0.3; // fraction of highest peak amplitude below which other peaks will be removed     
+    //    if (peaks.size()>1){
+        
+    //        double max_amplitude = *std::max_element(peaks_amplitude.begin(), peaks_amplitude.end());
+    //        vector<double>::iterator i2 = peaks.begin();
+    //        vector<double>::iterator j2 = peaks_amplitude.begin();  
+    //        for ( ; i2 != peaks.end() && j2!=peaks_amplitude.end(); ){
+    //            if (*j2<max_amplitude*thl){
+    //                i2 = peaks.erase(i2);
+    //                j2 = peaks_amplitude.erase(j2);
+    //            } else {
+    //                ++i2; ++j2;
+    //            }
+    //        }        
+    //    }     
+    
+    // First remove too small peaks
+    if (nfound>1){
+    
+        double max_amplitude = *std::max_element(peaks_amplitude.begin(), peaks_amplitude.end());
+        vector<double>::iterator i2 = peaks.begin();
+        vector<double>::iterator j2 = peaks_amplitude.begin();  
+        for ( ; i2 != peaks.end() && j2!=peaks_amplitude.end(); ){
+            if (*j2<max_amplitude*thl){
+                i2 = peaks.erase(i2);
+                j2 = peaks_amplitude.erase(j2);
+            } else {
+                ++i2; ++j2;
+            }
+        }        
+    } 
+    
+//    // If the number of remaining peaks is smaller than expected, duplicate the highest to
+//    // In case of one peak found I use it as the peak to fit
+//    if (peaks.size() < n_expected){
+//        peaks.clear();             
+//        while ( peaks.size() < n_expected) {
+//            peaks.push_back(max_amplitude);
+//            if (m_verbose <= __VER_INFO){cout<<"Warning: adding an artificial peak in the vector of found peaks."<<endl;}       
+//        }  
+//    }
+
+    
+    // !!!! TO REMOVE (temporary solution) !!!!!!
+    // In case of one peak found only I use it as the peak to fit
+    if( peaks.size() == 1 && n_expected==2) {
+        peaks.push_back(peaks.at(0)); 
+        if (m_verbose <= __VER_INFO){cout<<"Adding an artificial peak."<<endl;}       
+	}
+    
+    
+}
