@@ -4,6 +4,7 @@ TOTCalib/*.root
 *.so 
 TOTCalib/TOTCalibDict*
 *.pcm
+TOTCalib/runExplorePixelTOTResolution_Thomas.C
 
 // Qt creator files
 *.includes

@@ -28,6 +28,7 @@
 #include <queue>
 #include <map>
 #include <algorithm>
+#include <unordered_map>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,7 +40,7 @@ using namespace std;
 #define __npars_surrogate			    4
 #define __npars_lowe_fitfunc            7
 #define __min_tmathprobtest_val      0.90
-#define __max_fit_tries                100
+#define __max_fit_tries               100
 #define __fit_pars_randomization_max 1000
 #define __fit_pars_randomization_min   20
 
@@ -52,7 +53,7 @@ using namespace std;
 #define __lowen_para_hint 3.0 // useless if at least 2 fits in the linear region succeeds
 #define __lowen_parb_hint 80.0 // useless if at least 2 fits in the linear region succeeds
 #define __lowen_parc_hint 200.0
-#define __lowen_part_hint 0.0
+#define __lowen_part_hint 2.0
 #define __lowen_par_fraction_random 0.4 // range for randomization around the given hint (i.e. put 0.0 to set the hint without randomization) 
 
 // Prototypes
@@ -60,7 +61,12 @@ double GausFuncAdd(double * x, double * par);
 void printProgBar( int );
 #define __fitfunc_lowen_npars  7
 double fitfunc_lowen(double * x, double * par);
+double fitfunc_lowen2(double * x, double * par);
+double fitfunc_lowen_ZERO(double * x, double * par);
 double surrogatefunc_calib(double * x, double * par);
+double surrogatefunc_calib_ZERO(double * x, double * par);
+pair<double,double> Calculate_ab_From_ct_e1s1_e2s2(double,double,double,double,double,double);
+
 
 // Calibration Handler for each source
 class CalibHandler {
@@ -93,8 +99,6 @@ private:
 	map<int, double> m_calibPoints; // key: peak number in the source's histogram, value: energy of the peak (as defined in CalibHandler constructor) 
 	map<int, int> m_calibPointsRegion;
 	string m_sourceName;
-
-
 };
 
 
@@ -123,18 +127,24 @@ public :
 
 	//TTree * m_tree;
 
-    // Methods for calibration
+    // Methods for peak selection/fitting
     enum {
-        __standard = 0,
-        __lowStats,        
-        __jakubek // Method proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+        __peakStandard = 0,
+        __peakLowStats 	// Fit range and gaussian mean are fixed, better peak selection
     };
 
-	TOTCalib();   
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method = __standard);
-	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *, int method = __standard);
+    // Methods for calibration/surrogate fitting
+    enum {
+    	__calibStandard = 0,
+    	__calibJakubek, // Method proposed in J. Jakubek / Nuclear Instruments and Methods in Physics Research A 633 (2011) S262–S266
+    	__calibJakubekAlt // Alternate method, use new parametrization of the surrogate
+	};
 
-	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int method = __standard);
+	TOTCalib();   
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int peakMethod = __peakStandard);
+	TOTCalib(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, TOTCalib *, int peakMethod = __peakStandard);
+
+	void SetupJob(TString, TString, int minpix, int maxpix, int maxtot, Long64_t nFrames, int peakMethod = __peakStandard);
 
 	virtual ~TOTCalib();
 	virtual Int_t    Cut(Long64_t entry);
@@ -154,25 +164,31 @@ public :
 	// points to store
 	struct store {
 
-		vector< pair<double, double> > pointsSave;
+		vector< pair<double, double> > pointsSave_E_TOTfit;
 		vector< double > pointsSaveSigmas;
 		vector< double > pointsSaveConstants;
 		vector< double > pointsSave_ia;
 		vector< double > pointsSave_ib;
 		vector< double > pointsSave_ic;
 		vector< double > pointsSave_it;
+        vector< double > pointsSave_chi2ndf;
 		vector< int > calibTOTPeaks;
-		vector<pair<double,double> > linearpairs;
+		vector<pair<double,double> > linearpairs; //(E, TOT)
 		vector<int> peakFitStatus;
+        vector< pair<double,double> > pointsSave;                
 	};
 
 	TH1I * GetHisto(int, TString extra = "");
 	TF1 * GetKernelDensityFunction(int);
 	int GetCriticalPoints(int i , vector<double> &, vector<double> &);
-	int GetSign(double slope);
-	map<int, vector<double> > GetMaxPeaksIdentified(){ return m_critPointsMax; };
-	CalibHandler * GetCalibHandler(){ return m_calhandler; };
-	vector< pair<double, double> > GetCalibPoints(int pix){ return m_calibPoints[pix]; };
+    int GetCriticalPoints2(int pixID , vector<double> &, vector<double> &);
+    int GetSign(double slope);
+	unordered_map<int, vector<double> > GetMaxPeaksIdentified(){ return m_critPointsMax;}
+    unordered_map<int, vector<double> > GetMaxPeaksIdentified_amplitude(){ return m_critPointsMax_amplitude; }	
+    vector <vector<double> > GetMaxPeaksIdentified_vec(){ return m_critPointsMax_vec;}
+    vector < vector<double> > GetMaxPeaksIdentified_amplitude_vec(){ return m_critPointsMax_amplitude_vec; }	
+    CalibHandler * GetCalibHandler(){ return m_calhandler; }
+	vector< pair<double, double> > GetCalibPoints(int pix){ return m_calibPoints_E_TOTfit[pix]; }
 	TF1 * GetSurrogateFunction(int);
 	TGraphErrors * GetCalibGraph(int pix);
 	void RandomFitParametersSurrogate (TF1 * f, double, double);
@@ -189,6 +205,7 @@ public :
 	void Blender(TOTCalib * , TOTCalib *, TString, int = 0);
 	void Blender(TOTCalib * s2, TString outputName, int = 0);
 	void Blender(TString, int = 0);
+    void Blender2(TOTCalib * , TOTCalib *, TString);
 
     void SavePixelResolution(TString, TString = "", TString = "", TString = "", TString = "");
     void GetCoeffFromFiles(double *, double *, double *, double *, const char *, const char *, const char *, const char *, int, int);
@@ -197,16 +214,21 @@ public :
     TH1D *GetHistoCalibrated(int, TString, double, double *, double *, double *, double *);
     
 	void ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
-	void ReorderSources();
+    void ProcessOneSource2_gaussian(TOTCalib *, store *, int);
+    void ProcessOneSource2_lowen(TOTCalib *, store *, int, double &, double &, double &, double &);	
+    void ReorderSources();
 
 	//int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *);
-    int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *, double = 0.0);    
+    int PeakFit(TOTCalib *, int, int, TF1 *, TH1 *, store *, double = 0.0); 
+    int PeakFit2_gaussian(TOTCalib *, int, int, TF1 *, TH1 *);    
+    int PeakFit2_lowen(TOTCalib *, int, TF1 *, TH1 *, store *, double = 0.0);
 	TF1 * FittingFunctionSelector(double, TOTCalib *, int);
 	void GetLinearFit(double & a, double & b, vector< pair<double,double> > p);
 	void RandomFitParameters(TF1 * f, TH1 * h, int tot, TOTCalib *);
 
 	vector<pair<double, double> > Extract_E_TOT_Points(int, TOTCalib * );
-	int GetNumberOf_E_TOT_Points (TOTCalib * s);
+    vector<pair<double, double> > Extract_E_TOT_Points2(int, TOTCalib * );	
+    int GetNumberOf_E_TOT_Points (TOTCalib * s);
 	int GetNumberOf_E_TOT_Points_Positive (TOTCalib * s);
 
 	double DerivativeFivePointsStencil(TF1 *, double, double);
@@ -228,6 +250,7 @@ public :
 
 	void DrawFullPixelCalib(int);
 	void DrawFullPixelCalib(int, int);
+    void DrawFullPixelCalib2(int);
 
 	void SetVerboseLevel(int v) {m_verbose = v;};
 	enum {
@@ -245,10 +268,14 @@ public :
 	void IgnorePoint(int i){ m_calhandler->CalibIgnorePoint(i); };
 	void SetPointRegion(int i, int reg){ m_calhandler->CalibSetPointRegion(i,reg); };
 
-	int GetCalibMethod() { return m_method; };
+	int GetPeakMethod() {return m_peakMethod; };
+	int GetCalibMethod() { return m_calMethod; };
+	void SetPeakMethod(int m) {m_peakMethod = m; };
+	void SetCalibMethod(int m) {m_calMethod = m; };
 
 	vector<vector<double> > Get_m_histo(){return m_calibhistos;}; // each pixel has its own histogram
 	void SetGlobalHisto(vector<double> v){m_globalhisto=v;}; // every histogram are merged in this vector
+	vector<double> GetGlobalHisto(){return m_globalhisto;};
 
 	void SetGlobalCriticalPoints(vector<double> max, vector<double> min){ 
 		m_global_max=max;
@@ -272,8 +299,9 @@ public :
 											map<int, vector<double> > ic,
 											map<int, vector<double> > it,
 											map<int, vector<double> > param,
-											map<int, int> status){
-		m_calibPoints = points;
+											map<int, int> status,
+											int calibMethod){
+		m_calibPoints_E_TOTfit = points;
 		m_calibPointsSigmas = sig;
 		m_calibPointsConstants = consts;
 		m_calibPoints_ia = ia;
@@ -282,6 +310,10 @@ public :
 		m_calibPoints_it = it;
 		m_calibSurrogateConstants = param;
 		m_surrogateStatus = status;
+		m_maxpix = status.rbegin()->first;
+		m_minpix = status.begin()->first;
+		m_calMethod = calibMethod;
+
 	};
 
 	void DumpSpectrumVectorFromSavedFile(	vector< vector<double> > spectrum){
@@ -294,10 +326,11 @@ public :
 		m_calhandler = new CalibHandler(s.Data());
 	};
 
-	void DumpSourceInfoFromSavedFile(map<int, double> p, map<int, int> r, map<int, vector<double> > max){
+	void DumpSourceInfoFromSavedFile(map<int, double> p, map<int, int> r, unordered_map<int, vector<double> > max, int peakMethod){
 		m_calhandler->Set_m_calibPoints(p);
 		m_calhandler->Set_m_calibPointsRegion(r);
 		m_critPointsMax = max;
+		m_peakMethod = peakMethod;
 	};
 
 	void AddSingleSourceFromSavedFile( TOTCalib * s){
@@ -316,6 +349,9 @@ public :
 	
 		m_gf_lowe = new TF1("gf_lowe", fitfunc_lowen, 0., maxrange, __fitfunc_lowen_npars);
 		m_gf_lowe->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
+
+		m_gf_lowe_ZERO = new TF1("gf_lowe_ZERO", fitfunc_lowen_ZERO, 0., maxrange, __fitfunc_lowen_npars);
+		m_gf_lowe_ZERO->SetParameters(1, 1, m_bandwidth, 1,1,1,1);
 	}
 
 	int GetMatrixWidth(){return __matrix_width;};
@@ -326,23 +362,52 @@ public :
 	vector<TOTCalib *> GetSourcesVector(){return m_allSources;};
 
 	map<int, vector<double>> GetMapCalibPointsConstants(){return m_calibPointsConstants;};
-	map<int, vector< pair<double, double> > > GetMapCalibPoints(){return m_calibPoints;};
+	map<int, vector< pair<double, double> > > GetMapCalibPoints(){return m_calibPoints_E_TOTfit;};
 	map<int, vector<double> > GetMapCalibSigmas(){return m_calibPointsSigmas;};
 	map<int, vector<double> > GetMapCalibIA(){return m_calibPoints_ia;};
 	map<int, vector<double> > GetMapCalibIB(){return m_calibPoints_ib;};
 	map<int, vector<double> > GetMapCalibIC(){return m_calibPoints_ic;};
 	map<int, vector<double> > GetMapCalibIT(){return m_calibPoints_it;};
 
+	void ParametersEstimation(int);
+	bool GetParametersEstimationStatus(){return globalEstimationSuccess;};
+	void SetThresholdBound(double e0){m_e0_bound = e0;};
 
+	vector<double> GetParametersEstimation(){ 
+		vector <double> v;   v.push_back(m_glob_const.first);   v.push_back(m_glob_sig.first);   v.push_back(m_glob_a.first);
+		v.push_back(m_glob_b.first);   v.push_back(m_glob_c.first);   v.push_back(m_glob_t.first); v.push_back(m_glob_e0.first);    return v; };
 
+	vector<double> GetParametersEstimationErrors(){ 
+		vector <double> v;   v.push_back(m_glob_const.second);   v.push_back(m_glob_sig.second);   v.push_back(m_glob_a.second);
+		v.push_back(m_glob_b.second);   v.push_back(m_glob_c.second);   v.push_back(m_glob_t.second); v.push_back(m_glob_e0.second);    return v; };
 
+	void DumpParametersEstimation(vector< double> v, vector<double> verr){
+		m_glob_const.first = v[0]; m_glob_const.second = verr[0];
+		m_glob_sig.first = v[1]; m_glob_sig.second = verr[1];
+		m_glob_a.first = v[2]; m_glob_a.second = verr[2];
+		m_glob_b.first = v[3]; m_glob_b.second = verr[3];
+		m_glob_c.first = v[4]; m_glob_c.second = verr[4];
+		m_glob_t.first = v[5]; m_glob_t.second = verr[5];
+		m_glob_e0.first = v[6]; m_glob_e0.second = verr[6];
+		globalEstimationSuccess = true; };
+
+    void WriteCalibToAsciiFiles(TString);
+    void Choose2LinearPeaks(double p1, double p2){m_linearPeak1=p1;m_linearPeak2=p2;return;}
+    void SetLowEnergyPeak(double p1){m_lowenPeak=p1;return;}    
+    void DrawFullPixelCalib_coeff_histos();
+    void SetLowEnFit_Params(double cons, double sig, double c, double t){m_lowen_fitParams[0]=cons; m_lowen_fitParams[1]=sig; m_lowen_fitParams[2]=c; m_lowen_fitParams[3]=t;return;}
+    Double_t* GetLowEnFit_Params(){return m_lowen_fitParams;}
+    void OptimizeOnePeak(double thl){m_OptimizeOnePeak_thl=thl;}    
+    Double_t GetOptimizeOnePeak_thl(){return m_OptimizeOnePeak_thl;}  
+    void RemoveSmallPeaks(Double_t, vector<double> &, vector<double> &, int);
+    
 private:
 	//////////////////////////////////////////////////////////////////
 	// histograms and info for all pixels;
 	//vector<TH1I *> m_calibhistos;
 	vector<vector<double> > m_calibhistos;
 	// key = pixel, values = points selected for calibration
-	map<int, vector< pair<double, double> > > m_calibPoints;
+	map<int, vector< pair<double, double> > > m_calibPoints_E_TOTfit;
 	map<int, vector<int> > m_calibTOTPeaks;
 	map<int, vector<double> > m_calibPointsSigmas;
 	map<int, vector<double> > m_calibPointsConstants;
@@ -359,7 +424,11 @@ private:
 	TF1 ** m_kerneldensityfunctions;
 
 	// key = pixel, val = vector of critical points
-	map<int, vector<double> > m_critPointsMax;
+	unordered_map<int, vector<double> > m_critPointsMax;
+    unordered_map<int, vector<double> > m_critPointsMax_amplitude; 
+    // try if faster with vector
+	vector < vector<double> > m_critPointsMax_vec;
+    vector < vector<double> > m_critPointsMax_amplitude_vec;  
 	// key = pixel, val = vector of critical points
 	map<int, vector<double> > m_critPointsMin;
 	// This map contains the final: a,b,c,t parameters of the calibration
@@ -411,6 +480,7 @@ private:
 	// Functions for fitting peaks in the data
 	TF1 * m_gf_linear;
 	TF1 * m_gf_lowe;
+	TF1 * m_gf_lowe_ZERO;
 	vector<TF1 * > m_extra_tf1_to_erase;
 
 	// Randon generators
@@ -422,7 +492,8 @@ private:
 	int __matrix_height;
 	int __matrix_width;
 
-	int m_method; //calibration method
+	int m_peakMethod; // peak fit method
+	int m_calMethod ; // calibration method
 
 	vector<double> m_globalhisto;	
 	vector<double> m_global_max; // Critical points of the whole map kernel
@@ -431,6 +502,23 @@ private:
 	TString	fp; // folder path (calib from image)
 	TString fn;	// file name (calib from image)
 	TString m_outputName; // output name
+
+	bool globalEstimationSuccess;
+	pair<double, double> m_glob_const;
+	pair<double, double> m_glob_sig;
+	pair<double, double> m_glob_a;
+	pair<double, double> m_glob_b;
+	pair<double, double> m_glob_c;
+	pair<double, double> m_glob_t;
+	double m_e0_bound = 0.;
+	pair<double, double> m_glob_e0;
+
+    double m_linearPeak1;
+    double m_linearPeak2;
+    double m_lowenPeak;  
+    Double_t m_lowen_fitParams[4]; // constant, sigma, c, t
+    Double_t m_OptimizeOnePeak_thl;    
+    
 };
 
 #endif

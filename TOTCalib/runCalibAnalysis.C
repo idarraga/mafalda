@@ -1,6 +1,7 @@
 /**
  *  Author: Jean-Samuel Roux <roux@lps.umontreal.ca>
  *  Load calibration root file for analysis and validation
+ *  Best if you run it interactively in CINT/CLING
  */
 
 #include <TH2I.h>
@@ -25,17 +26,26 @@ class TOTCalib;
 TOTCalib* calib;
 Int_t palette[4] = {kWhite, kRed, kBlue, kGreen}; // status color palette
 
+const Int_t NRGBs = 5; // gradient color palette
+const Int_t NCont = 255;
+Double_t stops[NRGBs] = { 0.00, 0.34, 0.61, 0.84, 1.00 };
+Double_t red[NRGBs]   = { 0.00, 0.00, 0.87, 1.00, 0.51 };
+Double_t green[NRGBs] = { 0.00, 0.81, 1.00, 0.20, 0.00 };
+Double_t blue[NRGBs]  = { 0.51, 1.00, 0.12, 0.00, 0.00 };
+
 void LoadFile(TString);
 void DrawFullPixelCalib(int);
 void DrawFullPixelCalib(int,int);   
 void DrawSurrogate(int);
 void DrawSurrogate(int,int);
 void DrawStatusMap();    
-void DrawParameterMap(string);
+void DrawParameterMap(TString);
 void DrawSpectrum(int,int,TString);    
 void DrawSpectrum(int,TString);        
-void DrawChiSquareMap();
-double surrogatefunc_cal(double*,double*);
+void DrawGlobalSpectrum(TString);
+Int_t GetMinimumNonEmptyBin(TH2D *);
+Int_t CountProcessedPixels();
+
 
 
 R__LOAD_LIBRARY(libTOTCalib.so);
@@ -48,7 +58,7 @@ void runCalibAnalysis (  ) {
 	int pix = 1000; // Work on this set of pixel
 	int x = 20; int y = 35;
 	
-    TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/macro_test.root";//
+    TString file = "/export/home/zp/roux/github/mafalda/TOTCalib/GaAs500.root";//
 	LoadFile(file);
 
 
@@ -61,9 +71,8 @@ void runCalibAnalysis (  ) {
 	//DrawSurrogate(pix);
 	////DrawSurrogate(x,y);
 //
-	DrawParameterMap("a");// use surrogate parameters a,b,c or t
-	DrawStatusMap();
-	DrawChiSquareMap();
+	//DrawParameterMap("a");// use surrogate parameters a,b,c or t
+	//DrawStatusMap();
 
 }
 
@@ -78,23 +87,42 @@ void LoadFile(TString s){
 	TTree * tsurr = (TTree*) f->Get("surrogateFunction");
 	TTree * tparam =(TTree*) f->Get("parameters");
 
-	map<int, vector<double> > * surr_p = nullptr;
-	map<int, int> *surr_status = nullptr;
+	map<int, vector<double> > * surr_p = 0;
+	map<int, int> *surr_status = 0;
+	int calibration_method;
+
 	tsurr->SetBranchAddress("parameters", &surr_p);
 	tsurr->SetBranchAddress("status", &surr_status);
+	tsurr->SetBranchAddress("calibMethod", &calibration_method);
 	tsurr->GetEntry(0); // this TTree has a single entry
+	
+	vector< double > v_estim;
+	vector< double > v_err;
+	double p_estim;
+	double p_estim_err;
+	if (f->GetListOfKeys()->Contains("globalParametersEstim") ){ // tree exists
+		TTree * t_est = (TTree*) f->Get("globalParametersEstim");
+		t_est->SetBranchAddress("globEstimation", &p_estim);
+		t_est->SetBranchAddress("globEstError", &p_estim_err);
+		int entries = t_est->GetEntries();
+		for (int k = 0; k<entries; k++){
+			t_est->GetEntry(k);
+			v_estim.push_back(p_estim);
+			v_err.push_back(p_estim_err);
+		}
+	}
 
-	map<int, vector< pair<double, double> > > * points = nullptr; //energy and mean
-	map<int, vector<double> > * sigmas = nullptr;
-	map<int, vector<double> > * constants = nullptr;
-	pair<double, double> * thres = nullptr; //threshold + error
-	vector<TString> * sn = nullptr; //source name
+	map<int, vector< pair<double, double> > > * points = 0; //energy and mean
+	map<int, vector<double> > * sigmas = 0;
+	map<int, vector<double> > * constants = 0;
+	pair<double, double> * thres = 0; //threshold + error
+	vector<TString> * sn = 0; //source name
 
 	// low energy fit parameter
-	map<int, vector<double> > *calibPoints_ia = nullptr;
-	map<int, vector<double> > *calibPoints_ib = nullptr;
-	map<int, vector<double> > *calibPoints_ic = nullptr;
-	map<int, vector<double> > *calibPoints_it = nullptr;
+	map<int, vector<double> > *calibPoints_ia = 0;
+	map<int, vector<double> > *calibPoints_ib = 0;
+	map<int, vector<double> > *calibPoints_ic = 0;
+	map<int, vector<double> > *calibPoints_it = 0;
 
 	tparam->SetBranchAddress("energyAndGausMean", &points);
 	tparam->SetBranchAddress("gausSigma", &sigmas);
@@ -108,16 +136,23 @@ void LoadFile(TString s){
 
 	// Dump variables into calib
 	tparam->GetEntry(0); // this TTree has a single entry
-	calib-> DumpCalibParametersFromSavedFile(*points, *sigmas, *constants, *calibPoints_ia, *calibPoints_ib, *calibPoints_ic, *calibPoints_it, *surr_p, *surr_status);
+	calib-> DumpCalibParametersFromSavedFile(*points, *sigmas, *constants, *calibPoints_ia, *calibPoints_ib,
+					 *calibPoints_ic, *calibPoints_it, *surr_p, *surr_status, calibration_method);
 	calib-> SetGlobalThresholdEnergyAndErr((*thres).first, (*thres).second);
+	if (!v_estim.empty()){
+		calib->DumpParametersEstimation(v_estim,v_err);
+	}
+
 	
 	// Create sub-TOTCalib objects from TTrees
 	vector<TString>::iterator it;
 	TOTCalib * tempSource;
-	vector< vector<double> > * spectrum = nullptr;
-	map<int, double> *CHpoints = nullptr; // points defined in calib handler object
-	map<int, int> *CHregions = nullptr; // regions defined in calib handler object
-	map<int, vector<double> > *max = nullptr; // identified peaks (required by DrawFullPixelCalib)
+	vector< vector<double> > * spectrum = 0;
+	map<int, double> *CHpoints = 0; // points defined in calib handler object
+	map<int, int> *CHregions = 0; // regions defined in calib handler object
+	map<int, vector<double> > *max = 0; // identified peaks (required by DrawFullPixelCalib)
+	int peakMethod;
+
 	double bandwidth;
 
 	for (it = (*sn).begin(); it != (*sn).end(); it++){
@@ -128,13 +163,14 @@ void LoadFile(TString s){
 		tsour->SetBranchAddress("regions", &CHregions);
 		tsour->SetBranchAddress("points", &CHpoints);
 		tsour->SetBranchAddress("maximums", &max);
-		tsour -> GetEntry(0); // this TTree has a single entry
+		tsour->SetBranchAddress("peakMethod", &peakMethod);
+		tsour->GetEntry(0); // this TTree has a single entry
 
 		tempSource = new TOTCalib();
 		tempSource -> SetKernelBandWidth(bandwidth);
 		tempSource -> DumpSpectrumVectorFromSavedFile(*spectrum);
 		tempSource -> CreateCalibHandlerFromSavedFile( (*it) );
-		tempSource -> DumpSourceInfoFromSavedFile(*CHpoints, *CHregions, *max);
+		tempSource -> DumpSourceInfoFromSavedFile(*CHpoints, *CHregions, *max, peakMethod);
 
 		calib->AddSingleSourceFromSavedFile(tempSource);
 
@@ -207,12 +243,20 @@ void DrawSurrogate(int pix){ // from DrawFullPixelCalib
 	int npar = s->GetNpar();
 	for(int i = 0 ; i < npar ; i++) {
 		parS = "";
-		if ( i == 0 ) parS = "a = ";
-		if ( i == 1 ) parS = "b = ";
-		if ( i == 2 ) parS = "c = ";
-		if ( i == 3 ) parS = "t = ";
-		parS += TString::Format("%.2f"/* +/- %.2f*/, s->GetParameter(i), s->GetParError(i) ); 	// error on fit parameters is not computed
+
+		if ( i == 0 ) parS = "a  = ";
+		if ( i == 1 ) parS = "b  = ";
+		if ( i == 2 ) parS = "c  = ";
+		if ( i == 3 ) parS = "t  = ";
+
+		parS += TString::Format("%.2f"/* +/- %.2f*/, s->GetParameter(i)/*, s->GetParError(i) */); 	// error on fit parameters is not computed
 		l2->DrawLatex(maxel_x/2, maxel_y * (1 - (i/10.)), parS); 
+	}
+
+	if (calib->GetCalibMethod() == TOTCalib::__calibJakubekAlt){
+		parS = "e0 = ";
+		parS += TString::Format("%.2f", calib->GetSurrogateParamMap()[pix][2]); // this is the threshold
+		l2->DrawLatex(maxel_x/2, maxel_y * (1 - (4/10.)), parS); 
 	}
 
 	c1->Update();
@@ -257,17 +301,31 @@ void DrawStatusMap(){
 	h->Draw("col");
 	ex1->Draw();
 	h->Draw("col same"); // must draw twice to set the right color palette
+	h->GetZaxis()->SetRangeUser(-2,1);
 }
 
-void DrawParameterMap(string p){
+void DrawParameterMap(TString p){
 	int index =-1;
 	if (p == "a") {index = 0;}
 	else if (p == "b"){index = 1;}
 	else if (p == "c"){index = 2;}
 	else if (p == "t"){index = 3;}
-	else {
+	else if (p == "e0"){
+		if ( calib->GetCalibMethod()==TOTCalib::__calibJakubekAlt){
+			index = 2;
+		}else{
+			cout << "[ERROR] Parameter e0 not computed in your calibration." << endl;
+			cout << "        Please use one of the following parameters: a, b, c, t." << endl;
+		return;
+		} 
+	}
+	else if (calib->GetCalibMethod()==TOTCalib::__calibJakubekAlt){
 		cout << "[ERROR] Parameter " << p << " unrecognized."<< endl;
-		cout << "        Please use one of the following parameters: a, b, c, t." << endl;
+		cout << "        Please use one of the following parameters: a, b, c, t, e0." << endl;
+		return;
+	} else{
+		cout << "[ERROR] Parameter " << p << " unrecognized."<< endl;
+		cout << "        Please use one of the following parameters: a, b, c, t" << endl;
 		return;
 	}
 
@@ -295,15 +353,21 @@ void DrawParameterMap(string p){
 		if (v.empty()){
 			h->SetBinContent(pix_xy.first+1, pix_xy.second+1, 0.);	//binID has to have +1 because there is no bin/row/column 0
 		} else{
-			h->SetBinContent(pix_xy.first+1, pix_xy.second+1, v[index]);
+			if (p=="c" && calib->GetCalibMethod()==TOTCalib::__calibJakubekAlt){
+				h->SetBinContent(pix_xy.first+1, pix_xy.second+1, (v[0]*v[2]+v[1]) * (v[2]-v[3]) ); // converts e0 to c
+			} else {
+				h->SetBinContent(pix_xy.first+1, pix_xy.second+1, v[index]);
+			}
 		}
 	}
 	c1->cd();
 	h->SetStats(kFALSE);
-	TExec *ex2 = new TExec("ex2","gStyle->SetPalette(1);");
+	TExec *ex2 = new TExec("ex2","TColor::CreateGradientColorTable(NRGBs, stops, red, green, blue, NCont);");
 	h->Draw("colz");
 	ex2->Draw();
+	gStyle->SetNumberContours(255);
 	h->Draw("colz same"); // must draw twice to set the right color palette
+	h->GetZaxis()->SetRangeUser(h->GetBinContent(GetMinimumNonEmptyBin(h)), h->GetBinContent(h->GetMaximumBin()));
 }
 
 void DrawSpectrum(int x, int y, TString s){
@@ -372,9 +436,6 @@ void DrawSpectrum(int pix, TString s){
 
 	TH1 * h; TF1 * kf;
 
-	TLegend * leg1 = new TLegend(0.6, 0.6, 0.9, 0.9);
-	leg1->SetFillColor(kWhite);
-	leg1->SetBorderSize(1);
 
 	TF1 * gf; TF1 * gf_clone;
 
@@ -394,8 +455,6 @@ void DrawSpectrum(int pix, TString s){
 	kf->GetXaxis()->SetTitle("TOT");
 	kf->GetYaxis()->SetTitle("entries");
 
-	leg1->AddEntry(kf, "k.d.f. (envelope)", "L");
-	leg1->AddEntry(h, "Calibration data", "L");
 
 	TLatex * l1 = new TLatex();
 	l1->DrawLatex(source->GetNBins()/2, h->GetMaximum() * 0.5 , name);
@@ -453,7 +512,10 @@ void DrawSpectrum(int pix, TString s){
          if( TString(gf->GetName()).Contains("gf_lowe") ) {
 
              cout << "Constant: "<< fit_const[orderCntr] << ", " << "Mean: " <<fit_mean[orderCntr].first << ", " <<"Sigma: "<< fit_sigmas[orderCntr] << ", ";
-             cout <<"a: "<< fit_ia[orderCntr] << ", " <<"b: "<< fit_ib[orderCntr] << ", " <<"c: "<< fit_ic[orderCntr] << ", " <<"t: "<< fit_it[orderCntr];
+             cout <<"a: "<< fit_ia[orderCntr] << ", " <<"b: "<< fit_ib[orderCntr] << ", " ;
+             if (calib->GetCalibMethod() == TOTCalib::__calibJakubekAlt) {cout << "e0: ";}
+             else{cout << "c: ";}
+             cout << fit_ic[orderCntr] << ", " <<"t: "<< fit_it[orderCntr];
 
          }else{
 
@@ -465,8 +527,6 @@ void DrawSpectrum(int pix, TString s){
 		gf_clone->SetLineColor(kRed);
 		gf_clone->Draw("same");              
 
-		leg1->AddEntry(gf_clone, "Fit on spectrum", "L");
-
 
 		//TString peak = TString::Format( "%.1f  -> %.3f keV", calibFitPoints[orderCntr].second, calibPoints[p] );
 		TString peak = TString::Format( "%.1f  -> %.3f keV", fit_mean[orderCntr].second, calibPoints[p] );
@@ -477,13 +537,15 @@ void DrawSpectrum(int pix, TString s){
 		orderCntr++;
 	}
 
-	leg1->Draw();
 	c1->Update();
 
 }
 
 
-void DrawChiSquareMap(){
+// Chi2 map is irrelevent in most cases : error on the surrogate function if often miscalculated
+// and a few pixels may have a huge chi2 if one of the source is close to the divergence point
+
+/*void DrawChiSquareMap(){
 	TString cname = "ChiSquare_map";
 	TString ctitle = "Surrogate fit - Chi2";
 	TCanvas * c1 = new TCanvas(cname, ctitle);
@@ -521,26 +583,129 @@ void DrawChiSquareMap(){
 	c1->cd();
 
 	h->SetStats(kFALSE);
-	TExec *ex2 = new TExec("ex2","gStyle->SetPalette(1);");
+	TExec *ex2 = new TExec("ex2","TColor::CreateGradientColorTable(NRGBs, stops, red, green, blue, NCont);");
 	h->Draw("colz");
 	ex2->Draw();
+	gStyle->SetNumberContours(255);
 	h->Draw("colz same"); // must draw twice to set the right color palette
+	h->GetZaxis()->SetRangeUser(h->GetBinContent(GetMinimumNonEmptyBin(h)), h->GetBinContent(h->GetMaximumBin()));
+}*/
+
+void DrawGlobalSpectrum(TString s){
+
+
+	bool source_identified = false;
+	TOTCalib * source;
+	TString name;
+
+	vector<TOTCalib*> sourVec = calib->GetSourcesVector();
+	int it; // iterator
+
+	int orderCntr = 0;
+	for( it = 0; it < sourVec.size(); it++){
+		name = (sourVec[it])->GetCalibHandler()->GetSourcename();
+		if (name == s){
+			source = sourVec[it];
+			source_identified = true;
+			break;
+		}
+	}
+
+	if(!source_identified){
+		cout << "[ERROR] Source " << s.Data() << " unrecognized. Sources in your file are:" << endl;
+		for(it = 0; it < sourVec.size(); it++){
+			cout << sourVec[it]->GetCalibHandler()->GetSourcename() << "   " ; }
+		cout << endl;
+		return;
+	}
+
+	TString cname = s + "_globalSpectrum";
+	TString ctitle = "Global Spectrum - "+s;
+	TCanvas * c1 = new TCanvas(cname, ctitle);
+	if(source->GetGlobalHisto().empty()) calib->CreateGlobalKernelAndGetCriticalPoints();  // global histo is only constructed once
+	vector<double> v = source->GetGlobalHisto();
+	vector<double>::iterator i;
+	TH1I * h = new TH1I(s+"_glob", s+"_global", v.size(), 0, v.size());
+	int cntr = 0;
+	for(i = v.begin(); i!=v.end(); i++){
+		h->SetBinContent(h->FindBin(cntr), *i);
+		cntr++;
+	}
+
+	h->GetXaxis()->SetTitle("TOT");
+	h->GetYaxis()->SetTitle("entries");
+	h->Rebin(2,"");
+	h->Draw("hist");
+
+	//if Jakubek method was used and the parameters estimated
+	if (calib->GetParametersEstimationStatus()){
+		TF1 * gf;
+		map<int, double> calibPoints = source->GetCalibHandler()->GetCalibPoints();
+		map<int, int> calibRegion = source->GetCalibHandler()->GetCalibPointsRegion();
+		int nCalibPoints = (int)calibPoints.size();
+		for(int p = 0 ; p < nCalibPoints ; p++) {
+			if (calibRegion[p] !=CalibHandler::__lowenergy_reg) continue;
+
+			gf = calib->FittingFunctionSelector( calibPoints[p], source, p );
+			vector< double > v_estim = calib->GetParametersEstimation();
+			vector< double > v_err = calib->GetParametersEstimationErrors();
+			gf->SetParameter( 0, v_estim[0] * CountProcessedPixels() );	    gf->SetParError( 0, v_err[0] * CountProcessedPixels() );	
+			gf->SetParameter( 1, calibPoints[p]); 							gf->SetParError( 1, 0);		
+			gf->SetParameter( 2, v_estim[1] );    							gf->SetParError( 2, v_err[1] );		
+		    gf->SetParameter( 3, v_estim[2] );    							gf->SetParError( 3, v_err[2] );		
+		    gf->SetParameter( 4, v_estim[3] );    							gf->SetParError( 4, v_err[3] );		
+		    gf->SetParameter( 6, v_estim[5] );    							gf->SetParError( 6, v_err[5] );		
+		    if (calib->GetCalibMethod()==TOTCalib::__calibJakubekAlt){
+		    	gf->SetParameter( 5, v_estim[6] );							gf->SetParError( 5, v_err[6] );
+			} else {
+				gf->SetParameter( 5, v_estim[4]);							gf->SetParError( 5, v_err[4] );
+			}
+		
+			gf->Draw("same");
+    		c1->Update();
+
+    		cout << "Global estimation of calibration parameters gave the following results : " << endl;
+    		cout << "Constant = " << gf->GetParameter(0) << "+/-" <<  gf->GetParError(0) << " | Energy = " << gf->GetParameter(1) << "+/-" <<  gf->GetParError(1);
+    		cout << " | Sigma = " << gf->GetParameter(2) << "+/-" <<  gf->GetParError(2) << " | a = " <<gf->GetParameter(3) << "+/-" <<  gf->GetParError(3);
+    		cout << " | b = " <<gf->GetParameter(4) << "+/-" <<  gf->GetParError(4);
+    		if (calib->GetCalibMethod()==TOTCalib::__calibJakubekAlt) {cout << " | e0 = ";} else {cout << " |c = ";}
+    		cout << gf->GetParameter(5) << "+/-" <<  gf->GetParError(5) << " | t = " << gf->GetParameter(6) << "+/-" <<  gf->GetParError(6) << endl;
+     		break;
+        }
+
+    	    	
+	}
+
 }
 
+Int_t GetMinimumNonEmptyBin(TH2D *h){
+	const int nbinsX = h->GetNbinsX();
+	const int nbinsY = h->GetNbinsY();
+	double min_content = -1.;
+	int minX = 0; 
+	int minY = 0;
 
-double surrogatefunc_calib(double * x, double * par) {
+	for(int i = 1; i <= nbinsX; i++){
+		for(int j =1 ; j <= nbinsY; j++){
+			double content = h->GetBinContent(i,j);
+			if((content > 0 && content < min_content) || (content > 0 && min_content < 0) ){
+				min_content = content;
+				minX = i; minY = j;
+			}
+		}
+	}
+	return h->GetBin(minX,minY);
+}
 
-	// independent var
-	double xx = x[0];
+Int_t CountProcessedPixels(){
+	int size = calib->GetMatrixSize();
+	map<int, int> status = calib->GetSurrogateStatusMap();
 
-	// pars
-	double a = par[0];
-	double b = par[1];
-	double c = par[2];
-	double t = par[3];
+	int it;
+	Int_t pixCount = 0;
+	for (it = 0; it < size; it++){
+		if (status.find(it) != status.end()) pixCount++;
+	}
 
-	double func = a * xx + b;
-	func -= ( c / ( xx - t) );
-
-	return func;
+	return pixCount;
 }
