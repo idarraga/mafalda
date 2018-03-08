@@ -204,7 +204,7 @@ public :
 	void Blender(TOTCalib * , TOTCalib *, TString, int = 0);
 	void Blender(TOTCalib * s2, TString outputName, int = 0);
 	void Blender(TString, int = 0);
-    void Blender2(TOTCalib * , TOTCalib *, TString, int = 0);
+    void Blender2(TOTCalib * , TOTCalib *, TString);
 
     void SavePixelResolution(TString = "", TString = "", TString = "", TString = "");
     void GetCoeffFromFiles(double *, double *, double *, double *, const char *, const char *, const char *, const char *, int, int);

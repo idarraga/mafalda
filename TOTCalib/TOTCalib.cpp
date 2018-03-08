@@ -1656,7 +1656,7 @@ void TOTCalib::Blender (TString outputName, int calibMethod) {
 
 }
 
-void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int calibMethod) {
+void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName) {
 
     cout<<endl<<"-----------------------------------------------------------"<<endl;    
 	cout << "Blender ... making all the fits" << endl;
@@ -1667,15 +1667,10 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
 	m_allSources.push_back( s2 );
 	m_allSources.push_back( s3 );
     
-    m_calMethod = calibMethod;
     m_thresholdEnergy = 0.; // to avoid adding thl to the graph
     
 	ReorderSources();
     
-	//CreateGlobalKernelAndGetCriticalPoints();
-
-    //ParametersEstimation(m_calMethod); // must be placed after the definition of m_gf_lowe
-
     int nsources = m_allSources.size();
 	double percentage = 0.;
     int nBadPixels = 0;
@@ -1693,12 +1688,6 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
 		TString fn = "surr_pix_";
 		fn += pix;
 
-		int totalNPoints = 0;
-		vector<TOTCalib *>::iterator i;
-		for(i = m_allSources.begin() ; i != m_allSources.end() ; i++ ) {
-			totalNPoints += GetNumberOf_E_TOT_Points_Positive( *i );
-		}
-
 		// Set of vectors used to store info
 		store * st = new store;
         
@@ -1709,34 +1698,31 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
         double t = 0.;
         
         // ---------------------------------   Proceed with the fits   ---------------------------------------
-        if ( totalNPoints > 0 ) {
+        if(m_verbose <= __VER_INFO) {            
+            cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
+        }    
+        
+        // Start with gaussian fits (low energy fit should be at the end of the vector)
+        for (int i = 0 ; i < nsources - 1  ; i++ ) {
+            TOTCalib* source = m_allSources.at(i);
+            ProcessOneSource2_gaussian(source, st, pix);               
+        }
+        
+        if(m_verbose <= __VER_INFO) {
+            cout << "Got " << st->linearpairs.size() << " pairs in the linear part." << endl;
+        }
 
-            if(m_verbose <= __VER_INFO) {            
-                cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
-            }    
-            
-            // Start with gaussian fits (low energy fit should be at the end of the vector)
-			for (int i = 0 ; i < nsources - 1  ; i++ ) {
-                TOTCalib* source = m_allSources.at(i);
-				ProcessOneSource2_gaussian(source, st, pix);               
-			}
-            
-            if(m_verbose <= __VER_INFO) {
-                cout << "Got " << st->linearpairs.size() << " pairs in the linear part." << endl;
-            }
-
-            // Finish with low energy fit
-            ProcessOneSource2_lowen(m_allSources.at(nsources-1), st,pix,a,b,c,t);
-            
-            // Flags for failed fits
-            if ((st->peakFitStatus).at(0)!=0) nfailedFits_slin1++;; 
-            if ((st->peakFitStatus).at(1)!=0) nfailedFits_slin2++;                                    
-            if ((st->peakFitStatus).at(2)!=0) nfailedFits_slow++;
-		}
+        // Finish with low energy fit
+        ProcessOneSource2_lowen(m_allSources.at(nsources-1), st,pix,a,b,c,t);
+        
+        // Flags for failed fits
+        if ((st->peakFitStatus).at(0)!=0) nfailedFits_slin1++;; 
+        if ((st->peakFitStatus).at(1)!=0) nfailedFits_slin2++;                                    
+        if ((st->peakFitStatus).at(2)!=0) nfailedFits_slow++;
         // --------------------------------------------------------------------------------------------------------
         
         // -------------------------------------   Save fit results   -------------------------------------------        
-		// Check if any of the sources had a fit status -1 := no data
+        // Check if any of the sources had a fit status -1 := no data
 		vector<int> allstatus = st->peakFitStatus;
         int surrogateStatus = 0;
         int goodFitCounter = count(allstatus.begin(), allstatus.end(), 0);
@@ -1787,12 +1773,11 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
 
         if ((nBadPixels>0) && (nBadPixels % 1000 == 0)){
             cout<<endl<<"!!!! WARNING: "<<nBadPixels<<" pixels failed so far !!!!"<<endl;
-        }
+        }      
+    }
     // ********************************************************************************************************** 
     // **********************************************************************************************************     
-    // ********************************************************************************************************** 
-      
-    }
+    // **********************************************************************************************************     
     
     // finish the progress bar
 	printProgBar( (int) 100 );
@@ -1803,11 +1788,9 @@ void TOTCalib::Blender2 (TOTCalib * s2, TOTCalib * s3, TString outputName, int c
     cout<<"Number of pixels with failed fit on the 2nd spectrum: "<<nfailedFits_slin2<<endl;
     cout<<"Number of pixels with failed fit on the 3rd spectrum (low energy): "<<nfailedFits_slow<<endl;
     cout<<"Total number of pixels with failed calibration: "<<nBadPixels<<endl;
-
     
     WriteCalibToAsciiFiles(outputName);
     return;
-
 }
 
 void TOTCalib::ParametersEstimation(int calMethod){
