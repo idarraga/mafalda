@@ -2954,6 +2954,8 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
         }
     }
 
+    //cout<<"----- PIXEL: "<<pix<<" source: "<<s->GetCalibHandler()->GetSourcename()<<endl;
+    
     // Remove extra peaks
 	while( peaks.size() > calibPoints.size() ) { 
 
@@ -2963,9 +2965,15 @@ vector<pair<double, double> > TOTCalib::Extract_E_TOT_Points2 (int pix, TOTCalib
         int index = std::distance(peaks_amplitude.begin(), result);
         peaks.erase(peaks.begin()+index);
         peaks_amplitude.erase(peaks_amplitude.begin()+index);
-	}   
+	}  
+    // at this point the vector should contain the right peaks except if there were 0 found peak originally
         
-    // In case user ask for optimization, remove too small peaks and resize vector to expected number of peaks
+    // In case the user asks for optimization, remove too small peaks and 
+    // resize vector to expected number of peaks, duplicating the highest peak.
+    // This can help in the (rare situation) when the found peak with
+    // highest amplitude is not at the right position (i.e. the vector
+    // of found peaks is not in the right order).
+    // If there were only one peak found originally, just duplicates it.
     double thl = s->GetOptimizeOnePeak_thl();
     if (thl>0.) RemoveSmallPeaks(thl, peaks, peaks_amplitude, calibPoints.size());       
     
@@ -4654,60 +4662,51 @@ pair<double,double> Calculate_ab_From_ct_e1s1_e2s2(double c, double t, double e1
 }
 
 void TOTCalib::RemoveSmallPeaks(Double_t thl, vector<double> & peaks, vector<double> & peaks_amplitude, int n_expected){
+// Optimization method 
     
-    int nfound = peaks.size();
+    if (!peaks.empty()){ // if no peak found nothing can be done...
     
-    //    // !!!! TO REMOVE (temporary solution) !!!!!!
-    //    // Remove too small peaks
-    //    double thl = 0.3; // fraction of highest peak amplitude below which other peaks will be removed     
-    //    if (peaks.size()>1){
+        int nfound = peaks.size();
         
-    //        double max_amplitude = *std::max_element(peaks_amplitude.begin(), peaks_amplitude.end());
-    //        vector<double>::iterator i2 = peaks.begin();
-    //        vector<double>::iterator j2 = peaks_amplitude.begin();  
-    //        for ( ; i2 != peaks.end() && j2!=peaks_amplitude.end(); ){
-    //            if (*j2<max_amplitude*thl){
-    //                i2 = peaks.erase(i2);
-    //                j2 = peaks_amplitude.erase(j2);
-    //            } else {
-    //                ++i2; ++j2;
-    //            }
-    //        }        
-    //    }     
-    
-    // First remove too small peaks
-    if (nfound>1){
-    
-        double max_amplitude = *std::max_element(peaks_amplitude.begin(), peaks_amplitude.end());
-        vector<double>::iterator i2 = peaks.begin();
-        vector<double>::iterator j2 = peaks_amplitude.begin();  
-        for ( ; i2 != peaks.end() && j2!=peaks_amplitude.end(); ){
-            if (*j2<max_amplitude*thl){
-                i2 = peaks.erase(i2);
-                j2 = peaks_amplitude.erase(j2);
-            } else {
-                ++i2; ++j2;
+        if (nfound==1){ // if only one peak found duplicate it
+                      
+            while ((int) peaks.size() < n_expected) {
+                peaks.push_back(peaks.at(0));
+                if (m_verbose <= __VER_INFO){cout<<"Warning: adding an artificial peak in the vector of found peaks."<<endl;}       
+            }  
+            
+        } else { // else remove too small peaks (if any according to thl), and duplicate the highest in case too many were removed
+            
+            // First remove too small peaks
+            std::vector<double>::iterator result; 
+            result = std::max_element(peaks_amplitude.begin(), peaks_amplitude.end());
+            double max_amplitude = *result;
+            int distance = std::distance(peaks_amplitude.begin(), result);
+            int tot_highest_peak = peaks.at(distance);           
+            vector<double>::iterator i2 = peaks.begin();
+            vector<double>::iterator j2 = peaks_amplitude.begin();  
+            for ( ; i2 != peaks.end() && j2!=peaks_amplitude.end(); ){
+                if (*j2<max_amplitude*thl){
+                    i2 = peaks.erase(i2);
+                    j2 = peaks_amplitude.erase(j2);
+                } else {
+                    ++i2; ++j2;
+                }
+            }  
+            
+            // If the number of remaining peaks is smaller than expected, duplicate the peak
+            // with highest amplitude to fill the vector with the expected number of peaks.
+            if ((int)peaks.size() < n_expected){
+                peaks.clear();             
+                while ((int) peaks.size() < n_expected) {
+                    peaks.push_back(tot_highest_peak);
+                    if (m_verbose <= __VER_INFO){cout<<"Warning: adding an artificial peak in the vector of found peaks."<<endl;}       
+                }  
             }
-        }        
+            
+        }
+            
     } 
-    
-//    // If the number of remaining peaks is smaller than expected, duplicate the highest to
-//    // In case of one peak found I use it as the peak to fit
-//    if (peaks.size() < n_expected){
-//        peaks.clear();             
-//        while ( peaks.size() < n_expected) {
-//            peaks.push_back(max_amplitude);
-//            if (m_verbose <= __VER_INFO){cout<<"Warning: adding an artificial peak in the vector of found peaks."<<endl;}       
-//        }  
-//    }
-
-    
-    // !!!! TO REMOVE (temporary solution) !!!!!!
-    // In case of one peak found only I use it as the peak to fit
-    if( peaks.size() == 1 && n_expected==2) {
-        peaks.push_back(peaks.at(0)); 
-        if (m_verbose <= __VER_INFO){cout<<"Adding an artificial peak."<<endl;}       
-	}
-    
-    
+     
+    return;    
 }
