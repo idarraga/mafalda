@@ -5,17 +5,17 @@
 1) you must have cmake installed first.
 2) in the TOTCalib folder, do:
 
-mkdir build
-
-cd build
-
-cmake ..
-
-make
+```
+$ mkdir build
+$ cd build
+$ cmake ..
+$ make
+```
 
 3) write your macro and run it from the macro folder as:
-
-root -l macro.C
+```
+$ root -l macro.C
+```
 
 ## How to use macros:
 
