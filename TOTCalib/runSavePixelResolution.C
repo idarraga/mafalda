@@ -38,15 +38,15 @@ void runSavePixelResolution() {
     pCu->Loop(); // Run this source
     
     // Without calibration
-     pCu->SavePixelResolution();  
+    //pCu->SavePixelResolution("SavePixelResolutionOutput_Cu_-50V"); // the argument is the name of the output root file.  
     
     // With calibration
-//    TString calib_folder = "/Users/thomasbilloud/workspace/DETECTEURS/2017_02_GaAs500_E06W0203/calib/2017_04_27_AmCdCu/";
-//    TString a = calib_folder+"TestGaAs500_a.txt";
-//    TString b = calib_folder+"TestGaAs500_b.txt";
-//    TString c = calib_folder+"TestGaAs500_c.txt";
-//    TString t = calib_folder+"TestGaAs500_t.txt";
-//    pCu->SavePixelResolution(a,b,c,t);    
+    TString calib_folder = "/Users/thomasbilloud/workspace/DETECTEURS/2017_02_GaAs500_E06W0203/calib/2017_04_27_AmCdCu/";
+    TString a = calib_folder+"TestGaAs500_a.txt";
+    TString b = calib_folder+"TestGaAs500_b.txt";
+    TString c = calib_folder+"TestGaAs500_c.txt";
+    TString t = calib_folder+"TestGaAs500_t.txt";
+    pCu->SavePixelResolution("SavePixelResolutionOutput_Cu_-50V",a,b,c,t); // the first argument is the name of the output root file.   
 
 
 }

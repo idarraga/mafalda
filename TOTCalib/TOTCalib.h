@@ -175,6 +175,7 @@ public :
 		vector< int > calibTOTPeaks;
 		vector<pair<double,double> > linearpairs; //(E, TOT)
 		vector<int> peakFitStatus;
+        vector< pair<double,double> > pointsSave;                
 	};
 
 	TH1I * GetHisto(int, TString extra = "");
@@ -206,11 +207,12 @@ public :
 	void Blender(TString, int = 0);
     void Blender2(TOTCalib * , TOTCalib *, TString);
 
-    void SavePixelResolution(TString = "", TString = "", TString = "", TString = "");
+    void SavePixelResolution(TString, TString = "", TString = "", TString = "", TString = "");
+    void SavePixelResolution2(TString, TString = "", TString = "", TString = "", TString = "");    
     void GetCoeffFromFiles(double *, double *, double *, double *, const char *, const char *, const char *, const char *, int, int);
     void GetCuadraticSolutions(pair<int,int>, int, double &, double &, double &, double *, double *, double *, double *);
     double GetE(pair<int,int>, int tot, double *, double *, double *, double *);
-    TH1I *GetHistoCalibrated(int, TString, double, double *, double *, double *, double *);
+    TH1D *GetHistoCalibrated(int, TString, double, double *, double *, double *, double *);
     
 	void ProcessOneSource(TOTCalib * s, store * sto, TGraphErrors * g, int pix, int & cntr);
     void ProcessOneSource2_gaussian(TOTCalib *, store *, int);
