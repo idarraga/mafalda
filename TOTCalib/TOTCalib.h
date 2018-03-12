@@ -208,6 +208,7 @@ public :
     void Blender2(TOTCalib * , TOTCalib *, TString);
 
     void SavePixelResolution(TString, TString = "", TString = "", TString = "", TString = "");
+    void SavePixelResolution2(TString, TString = "", TString = "", TString = "", TString = "");    
     void GetCoeffFromFiles(double *, double *, double *, double *, const char *, const char *, const char *, const char *, int, int);
     void GetCuadraticSolutions(pair<int,int>, int, double &, double &, double &, double *, double *, double *, double *);
     double GetE(pair<int,int>, int tot, double *, double *, double *, double *);

@@ -2384,6 +2384,92 @@ void TOTCalib::SavePixelResolution(TString outputname, TString file_a, TString f
 
 }
 
+void TOTCalib::SavePixelResolution2(TString outputname, TString file_a, TString file_b, TString file_c, TString file_t){
+
+    //************************* Prepare what should be saved ***************************
+    bool calib_required = false;
+    if (file_a != "") calib_required = true;
+    
+    TFile * m_output_root = new TFile(outputname+".root", "RECREATE");
+    m_output_root->cd();
+    TTree *tree = new TTree("SavePixelResolution","SavePixelResolution");
+    
+    int br_int_pixID = 0;
+    int br_int_selectedpeak_ID = 0;
+    vector<double> br_double_totmeanfitError;
+    tree->Branch("pixelID", &br_int_pixID);
+    tree->Branch("selectedPeakID", &br_int_selectedpeak_ID);
+    //tree->Branch("FitMeanError", &br_double_totmeanfitError);
+
+    vector<double> br_double_totmeanfit_calibrated;
+    if (calib_required){
+        tree->Branch("FitMean_calibrated", &br_double_totmeanfit_calibrated);
+    }
+    
+    //********************** Part mainly inspired From Blender() *******************************
+    // Only one source used for this algo
+    m_allSources.push_back( this ); // vector<TOTCalib *> m_allSources;
+    Int_t sour_num = 0;
+    TOTCalib *source = m_allSources[sour_num];
+    double maxrange = (double) m_allSources[sour_num]->GetNBins();
+
+    double m_a[__matrix_width*__matrix_height];        
+    double m_b[__matrix_width*__matrix_height];
+    double m_c[__matrix_width*__matrix_height];
+    double m_t[__matrix_width*__matrix_height];    
+    
+    // if calibrated data is required from macro, get coeff from files
+    double energymax = 0.;
+    if (calib_required){
+        cout<<"------ Using calibrated spectra ------"<<endl;        
+        GetCoeffFromFiles(m_a,m_b,m_c,m_t,file_a,file_b,file_c,file_t,__matrix_width,__matrix_height);
+        CalibHandler *handler = source->GetCalibHandler();
+        map<int, double> calibPoints = handler->GetCalibPoints();
+        int npoints = calibPoints.size();    
+        energymax = calibPoints[npoints-1];
+        cout<<setprecision(3)<<"Highest expected peak in spectrum: "<< energymax<<" keV. Will use it for histo range."<<endl;        
+    }else{
+        cout<<"------ Using TOT spectra ------"<<endl; 
+    }
+        
+    // iterate over pixels
+    for (int pix = m_minpix ; pix <= m_maxpix ; pix++) {
+
+        pair<int, int> pix_xy = XtoXY(pix, __matrix_width);
+
+        // Skip the bad pixels
+        if ( PixelInBadPixelList(pix) ) continue;
+        
+        // Set of vectors used to store info
+        store * st = new store;    
+                     
+        if(m_verbose <= __VER_INFO) {            
+            cout<<endl<< "**************** Processing pixel : "<<pix<<" **************** "<<endl;
+        }else{
+            if (pix % 1000 == 0) cout<<endl<<"Processing pixel : "<<pix<<endl;
+        }    
+
+        ProcessOneSource2_gaussian(source, st, pix);                       
+        double totmean = ((st->pointsSave_E_TOTfit).at(0)).second;
+        double energymean = GetE(pix_xy,totmean,m_a,m_b,m_c,m_t);
+        
+        br_int_pixID = pix;
+        br_int_selectedpeak_ID = 0;
+        br_double_totmeanfit_calibrated.clear();
+        br_double_totmeanfit_calibrated.push_back(energymean);
+        tree->Fill();      
+        
+        delete st;
+    }   
+
+    // **************** Save everything *****************************
+    tree->Write();
+    m_output_root->Close();
+
+    return;
+}
+
+
 TH1D * TOTCalib::GetHistoCalibrated(int pix, TString extraName, double energymax, double *m_a, double *m_b, double *m_c, double *m_t){
 
 	// Create an histo from the vector<double> only if requested here
