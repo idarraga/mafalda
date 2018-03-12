@@ -1,11 +1,27 @@
-How to use macros:
+# TOTCalib
 
--------------------- runTOTCalib.C --------------------
+## How to install and run:
+
+1) you must have cmake installed first.
+2) in the TOTCalib folder, do:
+mkdir build
+cd build
+cmake ..
+make
+3) write your macro and run it from the macro folder as:
+root -l macro.C
+
+
+## How to use macros:
+
+### runTOTCalib.C 
+
 Macro to run the TOT calibration (first implementation).
 Run it with ROOT6 as: root -l runTOTCalib.C
 Input source files must be MAFOutput root files from TOTCalibrationPreparation algo (in mafalda_framework).
 
--------------------- runTOTCalib2.C --------------------
+### runTOTCalib2.C 
+
 Macro to run the TOT calibration (2nd implementation, much faster than the first one).
 Run it with ROOT6 as: root -l runTOTCalib2.C
 Input source files must be MAFOutput root files from TOTCalibrationPreparation algo (in mafalda_framework).
@@ -23,7 +39,8 @@ TO DO:
 - adapt for more than 2 peaks in the linear regions
 - speed up the calibration by processing every steps pixel by pixel (the use of the C++ type unordered_map to save the peaks of all the 65k pixels slows done the algorithm significantly) 
 
---------------- runSavePixelResolution.C ---------------
+### runSavePixelResolution.C 
+
 Macro to record spectra and fits for each pixel from one source file only.
 Run it with ROOT6 as: root -l runSavePixelResolution.C
 Source file must be a MAFOutput root file from TOTCalibrationPreparation algo (in mafalda_framework).
@@ -31,7 +48,8 @@ It generates a root file (output_pixelResolution.root) that contains histos, ker
 This root file is intended to be used with runExplorePixelResolution.C
 If calibration files are given in argument when calling the function, it records calibrated histograms and fits as well (compatible with runExplorePixelResolution.C). The 4 text files (e.g. obtained by running runTOTCalib.C) must be given in the order a,b,c,t. 
 
-------------- runExplorePixelResolution.C --------------
+### runExplorePixelResolution.C
+
 Macro to display maps of values recorded by runSavePixelResolution.C.
 Run it with ROOT6/CLING as:
 root [0] TFile f("output_pixelResolution.root");
