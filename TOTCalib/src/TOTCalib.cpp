@@ -4,7 +4,7 @@
  */
 
 #define TOTCalib_cxx 
-#include "TOTCalib.h"
+#include "include/TOTCalib.h"
 #include <TF2.h>
 #include <TH2.h>
 #include <TStyle.h>

@@ -30,7 +30,7 @@ void runCintAttachGdbEmacs() {
   gSystem->Load("libHist");
   gSystem->Load("libHistPainter");
   //gSystem->Load("libMediPixAnalysisCore.so");
-  gSystem->Load("libTOTCalib.so");
+  gSystem->Load("../build/libTOTCalib");
 
   // Get pid
   int pid = gSystem->GetPid();

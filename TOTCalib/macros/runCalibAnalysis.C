@@ -48,12 +48,12 @@ Int_t CountProcessedPixels();
 
 
 
-R__LOAD_LIBRARY(libTOTCalib.so);
+R__LOAD_LIBRARY(../build/libTOTCalib);
 
 void runCalibAnalysis (  ) {
 
 	// Load calibration library
-	gSystem->Load("libTOTCalib.so");
+	gSystem->Load("../build/libTOTCalib");
 
 	int pix = 1000; // Work on this set of pixel
 	int x = 20; int y = 35;

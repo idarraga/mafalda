@@ -18,7 +18,7 @@ class TOTCalib;
 int nTotalFrames;
 int minpix; int maxpix;
 
-R__LOAD_LIBRARY(libTOTCalib) // ROOT6 (cling)
+R__LOAD_LIBRARY(../build/libTOTCalib) // ROOT6 (cling)
 
 void runTOTCalib (  ) {
 
