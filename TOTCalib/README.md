@@ -57,12 +57,14 @@ If calibration files are given in argument when calling the function, it records
 
 Macro to display maps of values recorded by runSavePixelResolution.C.
 Run it with ROOT6/CLING as:
+```
 root [0] TFile f("output_pixelResolution.root");
 root [1] SingleHitFitMeans->Draw("colz"); // other histograms available
 root [2] gStyle->SetOptStat(0); // remove stat box
 root [3] c1->AddExec("",".x runExplorePixelTOTResolution.C");  
 root [4] c1->ToggleEventStatus(); // to display pixel coordinate in the status bar (bottom line of canvas)
 root [5] gStyle->SetPalette(52); // Better vizualisation with black & white.
+```
 When pointing a specific pixel with the mouse it opens a canvas with its histogram, kernel and fit function.
 If calib files were used in runSavePixelResolution.C, a second canvas is opened which displays the calibrated spectrum with a gaussian fit.
 
