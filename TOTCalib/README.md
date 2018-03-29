@@ -40,9 +40,7 @@ NOTES:
 - Fitting range for low energy source is defined by the histogram range set in the macro
 - Fitting range for linear peaks is calculated from peak amplitude (rebin if histo is noisy, i.e it has dips in the gaussian peak !). The fraction of height amplitude is set at 0.5 but can be modified in TOTCalib.h with the value (__fraction_of_height_range_id). See PeakFit2_gaussian() for details.
 - Peak search optimization for the linear region sources: in case the user asks for optimization with the function OptimizeOnePeak(thl) in the macro, it removes too small found peaks (i.e with amplitude smaller than 'thl' x 'amplitude of the highest peak'). If only the highest remains but several peaks were defined, it is used as the peak to fit. This can help in the situations when the expected peaks are wrongly identified.
-TO DO:
-- adapt for more than 2 peaks in the linear regions
-- speed up the calibration by processing every steps pixel by pixel (the use of the C++ type unordered_map to save the peaks of all the 65k pixels slows done the algorithm significantly) 
+ws done the algorithm significantly) 
 
 ### runSavePixelResolution.C 
 
