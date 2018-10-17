@@ -174,7 +174,7 @@ bool ClusterTouchesBorder(cluster, int, int, int);
 double GetTOTOfHotestsPixel(cluster cl);
 
 bool GoodCandidateGraph2D(blob);
-void PrintMatrix(int **, int, int);
+void PrintMatrix(int **, int);
 int ** RefineGridOnce(int ** c, int * , int *);
 
 list< pair < pair<int, int>, int > >::iterator FindHotestPixel(list< pair < pair<int, int>, int > > *);
