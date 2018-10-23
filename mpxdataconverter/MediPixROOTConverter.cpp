@@ -50,10 +50,11 @@ void ProcessDexterFiles(vector<string> datfiles, FramesHandler * frames, WriteTo
 bool ProcessOneTimepix3File(string fn, FramesHandler *, WriteToNtuple * );
 bool ProcessOneDexterFile(string fn, FramesHandler *, WriteToNtuple * );
 
-TApplication * g_theApp = new TApplication("Output", 0, NULL);
+TApplication * g_theApp = nullptr;
 Int_t g_direction = 0;
 
 int main(int argc, char ** argv){
+	TApplication * g_theApp = new TApplication("Output", 0, NULL);
 
 	/////////////////////////////////////
 	// check flags
