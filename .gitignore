@@ -15,3 +15,12 @@ TOTCalib/runExplorePixelTOTResolution_Thomas.C
 
 // MacOs
 *.DS_Store
+
+// Some executables and auto-generated files to be ignored
+mpxdataconverter/mpxdataconverter
+mpxdataconverter/raw_to_pixeldm
+mpxdataconverter/SelDict.cpp
+mafalda_framework/MediPixAnalysisCoreDict.cpp
+
+// ROOT files, duh!
+*.root
