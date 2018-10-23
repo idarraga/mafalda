@@ -54,6 +54,7 @@ TApplication * g_theApp = nullptr;
 Int_t g_direction = 0;
 
 int main(int argc, char ** argv){
+	cout << "[START] Main entry point\n";
 	TApplication * g_theApp = new TApplication("Output", 0, NULL);
 
 	/////////////////////////////////////
@@ -61,10 +62,17 @@ int main(int argc, char ** argv){
 	TString tempScratchDir = "";
 	checkParameters(argc, argv, &tempScratchDir);
 
+	cout << "[DEBUG] Flags checked\n";
+
 	// create ntuple and FramesHandler
 	TString dataset = argv[2];
+	cout << "[DEBUG] Dataset = " << dataset << "\n";
+
 	WriteToNtuple * MPXnTuple = new WriteToNtuple(dataset, tempScratchDir);
+	cout << "[DEBUG] Made WriteToNTuple object\n";
+
 	FramesHandler frames(dataset);
+	cout << "[DEBUG] Made FrameHandler for the dataset\n";
 
 	Long_t skipFrames = 0;
 	if(argc == 5) skipFrames = atoi(argv[4]);
@@ -80,6 +88,8 @@ int main(int argc, char ** argv){
 	vector<string>::iterator itrF;
 	int nPixelmanFiles = handlerL.getListToLoop (tempScratchDir, listOfFiles, listOfDSCFiles, listOfIDXFiles);
 
+	cout << "[DEBUG] Handled list of files. Starting search\n";
+
 	// Search for Timepix3 files
 	int nTimepix3 = 0;
 	if ( nPixelmanFiles == 0 ) {
@@ -91,10 +101,10 @@ int main(int argc, char ** argv){
         nDosepixFiles = handlerL.getListToLoopDosepix(tempScratchDir, listOfFiles);
 	}
 
-    int nDexterFiles = 0;
-    if ( nPixelmanFiles == 0 && nTimepix3 == 0 && nDosepixFiles == 0) {
-        nDexterFiles = handlerL.getListToLoopDexterTXT(tempScratchDir, listOfFiles);
-    }
+	int nDexterFiles = 0;
+	if ( nPixelmanFiles == 0 && nTimepix3 == 0 && nDosepixFiles == 0) {
+	        nDexterFiles = handlerL.getListToLoopDexterTXT(tempScratchDir, listOfFiles);
+	}
 
 	// Handle dosepix files if any
 	if ( nDosepixFiles != 0 ) ProcessDosePixFiles(listOfFiles, skipFrames, &frames, MPXnTuple);
@@ -102,14 +112,15 @@ int main(int argc, char ** argv){
 	// Handle Timepix3 files if any
 	if ( nTimepix3 != 0 ) ProcessTimepix3Files(listOfFiles, &frames, MPXnTuple);
 
-    // Handle Dexter files
-    if ( nDexterFiles != 0 ) ProcessDexterFiles(listOfFiles, &frames, MPXnTuple);
+       // Handle Dexter files
+       if ( nDexterFiles != 0 ) ProcessDexterFiles(listOfFiles, &frames, MPXnTuple);
 
 	// If no files at all
-    if( nPixelmanFiles==0 && nDosepixFiles==0 && nTimepix3==0 && nDexterFiles==0) { // nothing at all
+	if( nPixelmanFiles==0 && nDosepixFiles==0 && nTimepix3==0 && nDexterFiles==0) {
+	// Nothing at all
         cout << "[NONE] Could not find any files. Nothing to be done." << endl;
-		delete MPXnTuple;
-		return 0;
+	delete MPXnTuple;
+	return 0;
 	}
 
 	// If only Timepix3
@@ -269,6 +280,7 @@ void histoProperties(TH2I * h1, TCanvas * c){
 
 void ProcessDexterFiles(vector<string> datfiles, FramesHandler * frames, WriteToNtuple * ntup) {
 
+    cout << "[ OK ] Process Dexter files, first filename:" << datfiles[0] << "\n";
     Long_t filesItr;
     string oneFileName;
 

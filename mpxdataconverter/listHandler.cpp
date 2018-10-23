@@ -171,16 +171,17 @@ int ListHandler::getListToLoopDexterTXT(TString, vector<string> &files)
     // rewind
     rewinddir(dp);
 
-    cout << "[INFO] found " << nJson << " json Dexter files" << endl;
+    cout << "[INFO] found " << nJson << " JSON Dexter files \n";
 
-    // In Dexter there won't be one json file per frame.  It is not
-    //  necesary.  If the conditions didn't change then only one
-    //  json file will be present.
+    // There is one JSON file per measurement (as viewed from Dexter)
+    // You don't have a guarantee on the number of JSON files,
+    //  don't use it as a check.
 
     // We need to pickup the txt files
     string csv_string = ".txt";
 
     // Find an get dsc files now
+    // --> WTF DSC files??? I guess this is incomplete code
     while ((dirp = readdir(dp)) != NULL) {
 
         tempfn = string(dirp->d_name);
@@ -190,10 +191,10 @@ int ListHandler::getListToLoopDexterTXT(TString, vector<string> &files)
         }
     }
 
-    // These files are not in order.  Attempt to oder
+    // These files are not in order.  Attempt to order
     list_order(files);
 
-    return (int)files.size();
+    return int(files.size());
 }
 
 int ListHandler::getListToLoopDosepix (TString /*tempScratchDir*/, vector<string> & files) {
