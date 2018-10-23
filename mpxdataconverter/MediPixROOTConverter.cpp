@@ -357,7 +357,7 @@ bool ProcessOneDexterFile(string fn, FramesHandler *, WriteToNtuple * ) {
             // read a line
             is.getline(temp, __max_length_dexter);
             string toparse = string(temp);
-            cout << toparse << endl;
+            //cout << toparse << endl;
 
         }
 
