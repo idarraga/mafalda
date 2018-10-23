@@ -135,8 +135,8 @@ int main(int argc, char ** argv){
 	cout << "[INFO] there are " << listOfFiles.size() << " frame files in directory" << endl;
 	cout << "[INFO] there are " << listOfIDXFiles.size() << " IDX files in directory" << endl;
 
-	if ( listOfDSCFiles.empty() ) {
-		cout << "[ERROR] I can't find the DSC files in the directory.  Giving up." << endl;
+	if ( listOfDSCFiles.empty() && nDexterFiles == 0) {
+		cout << "[ERROR] I can't find the DSC files in the directory. Giving up." << endl;
 		delete MPXnTuple;
 		return 1;
 	}
@@ -153,7 +153,7 @@ int main(int argc, char ** argv){
 	//}
 
 	//
-	if( listOfFiles.size() != listOfDSCFiles.size() ) {
+	if( (listOfFiles.size() != listOfDSCFiles.size()) && nDexterFiles == 0 ) {
 		std::cout << "[ERROR] you have a different amount of dsc and frame files." << std::endl;
 		std::cout << "        You probably have an extra file that doesn't correspond" << std::endl;
 		std::cout << "        to the data taking ... check it out.  Giving up." << std::endl;
