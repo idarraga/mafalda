@@ -1,5 +1,5 @@
 # MAFalda framework
-Code contributors: John Idarraga (2009+), Thomas Remy Victor Billoud, Oliver Michael Keller, Navrit Bal (2018).
+Code contributors: John Idarraga (idarraga)(2009+), Thomas Remy Victor Billoud (tbilloud), Oliver Michael Keller, jsroux, Navrit Bal (navrit)(2018).
 
 The CERN hosted version on SVN is not maintained and is an old version, do not use it: https://twiki.cern.ch/twiki/bin/view/Main/MAFalda
 
