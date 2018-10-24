@@ -15,18 +15,26 @@ WriteToNtuple::WriteToNtuple(TString dataSet, TString tempScratchDir){
   m_ntupleFileName = "";
 
   // change dir if requested
-  if(tempScratchDir.Length() > 0){
+  if(tempScratchDir.Length() > 0) {
     m_ntupleFileName += tempScratchDir;
     m_ntupleFileName += "/";
   }
-  
+
   m_ntupleFileName += "MPXNtuple_"+m_MPXDataSetNumber+".root";
+  cout << "[DEBUG] nTuple filename = " << m_ntupleFileName  <<"\n";
+
   nt = new TFile(m_ntupleFileName, "RECREATE");
+  cout << "[DEBUG] TFile made\n";
+
   t2 = new TTree("MPXTree","Medi/TimePix data");
+  cout << "[DEBUG] TTree made\n";
 
   m_frame = new FrameStruct(m_MPXDataSetNumber);
   t2->Branch("FramesData", "FrameStruct", &m_frame, 128000, 2);
   
+  cout << "[DEBUG] FrameStruct made\n";
+
+  cout << "[DEBUG] Some branch thing done. End of function\n";
 }
 
 WriteToNtuple::~WriteToNtuple(){

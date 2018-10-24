@@ -50,20 +50,29 @@ void ProcessDexterFiles(vector<string> datfiles, FramesHandler * frames, WriteTo
 bool ProcessOneTimepix3File(string fn, FramesHandler *, WriteToNtuple * );
 bool ProcessOneDexterFile(string fn, FramesHandler *, WriteToNtuple * );
 
-TApplication * g_theApp = new TApplication("Output", 0, NULL);
+TApplication * g_theApp = nullptr;
 Int_t g_direction = 0;
 
 int main(int argc, char ** argv){
+	cout << "[START] Main entry point\n";
+	TApplication * g_theApp = new TApplication("Output", 0, NULL);
 
 	/////////////////////////////////////
 	// check flags
 	TString tempScratchDir = "";
 	checkParameters(argc, argv, &tempScratchDir);
 
+	cout << "[DEBUG] Flags checked\n";
+
 	// create ntuple and FramesHandler
 	TString dataset = argv[2];
+	cout << "[DEBUG] Dataset = " << dataset << "\n";
+
 	WriteToNtuple * MPXnTuple = new WriteToNtuple(dataset, tempScratchDir);
+	cout << "[DEBUG] Made WriteToNTuple object\n";
+
 	FramesHandler frames(dataset);
+	cout << "[DEBUG] Made FrameHandler for the dataset\n";
 
 	Long_t skipFrames = 0;
 	if(argc == 5) skipFrames = atoi(argv[4]);
@@ -79,6 +88,8 @@ int main(int argc, char ** argv){
 	vector<string>::iterator itrF;
 	int nPixelmanFiles = handlerL.getListToLoop (tempScratchDir, listOfFiles, listOfDSCFiles, listOfIDXFiles);
 
+	cout << "[DEBUG] Handled list of files. Starting search\n";
+
 	// Search for Timepix3 files
 	int nTimepix3 = 0;
 	if ( nPixelmanFiles == 0 ) {
@@ -90,10 +101,10 @@ int main(int argc, char ** argv){
         nDosepixFiles = handlerL.getListToLoopDosepix(tempScratchDir, listOfFiles);
 	}
 
-    int nDexterFiles = 0;
-    if ( nPixelmanFiles == 0 && nTimepix3 == 0 && nDosepixFiles == 0) {
-        nDexterFiles = handlerL.getListToLoopDexterTXT(tempScratchDir, listOfFiles);
-    }
+	int nDexterFiles = 0;
+	if ( nPixelmanFiles == 0 && nTimepix3 == 0 && nDosepixFiles == 0) {
+	        nDexterFiles = handlerL.getListToLoopDexterTXT(tempScratchDir, listOfFiles);
+	}
 
 	// Handle dosepix files if any
 	if ( nDosepixFiles != 0 ) ProcessDosePixFiles(listOfFiles, skipFrames, &frames, MPXnTuple);
@@ -101,14 +112,15 @@ int main(int argc, char ** argv){
 	// Handle Timepix3 files if any
 	if ( nTimepix3 != 0 ) ProcessTimepix3Files(listOfFiles, &frames, MPXnTuple);
 
-    // Handle Dexter files
-    if ( nDexterFiles != 0 ) ProcessDexterFiles(listOfFiles, &frames, MPXnTuple);
+       // Handle Dexter files
+       if ( nDexterFiles != 0 ) ProcessDexterFiles(listOfFiles, &frames, MPXnTuple);
 
 	// If no files at all
-    if( nPixelmanFiles==0 && nDosepixFiles==0 && nTimepix3==0 && nDexterFiles==0) { // nothing at all
+	if( nPixelmanFiles==0 && nDosepixFiles==0 && nTimepix3==0 && nDexterFiles==0) {
+	// Nothing at all
         cout << "[NONE] Could not find any files. Nothing to be done." << endl;
-		delete MPXnTuple;
-		return 0;
+	delete MPXnTuple;
+	return 0;
 	}
 
 	// If only Timepix3
@@ -123,8 +135,8 @@ int main(int argc, char ** argv){
 	cout << "[INFO] there are " << listOfFiles.size() << " frame files in directory" << endl;
 	cout << "[INFO] there are " << listOfIDXFiles.size() << " IDX files in directory" << endl;
 
-	if ( listOfDSCFiles.empty() ) {
-		cout << "[ERROR] I can't find the DSC files in the directory.  Giving up." << endl;
+	if ( listOfDSCFiles.empty() && nDexterFiles == 0) {
+		cout << "[ERROR] I can't find the DSC files in the directory. Giving up." << endl;
 		delete MPXnTuple;
 		return 1;
 	}
@@ -141,7 +153,7 @@ int main(int argc, char ** argv){
 	//}
 
 	//
-	if( listOfFiles.size() != listOfDSCFiles.size() ) {
+	if( (listOfFiles.size() != listOfDSCFiles.size()) && nDexterFiles == 0 ) {
 		std::cout << "[ERROR] you have a different amount of dsc and frame files." << std::endl;
 		std::cout << "        You probably have an extra file that doesn't correspond" << std::endl;
 		std::cout << "        to the data taking ... check it out.  Giving up." << std::endl;
@@ -268,6 +280,7 @@ void histoProperties(TH2I * h1, TCanvas * c){
 
 void ProcessDexterFiles(vector<string> datfiles, FramesHandler * frames, WriteToNtuple * ntup) {
 
+    cout << "[ OK ] Process Dexter files, first filename:" << datfiles[0] << "\n";
     Long_t filesItr;
     string oneFileName;
 
@@ -344,7 +357,7 @@ bool ProcessOneDexterFile(string fn, FramesHandler *, WriteToNtuple * ) {
             // read a line
             is.getline(temp, __max_length_dexter);
             string toparse = string(temp);
-            cout << toparse << endl;
+            //cout << toparse << endl;
 
         }
 
